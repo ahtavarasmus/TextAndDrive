@@ -1,8 +1,11 @@
 package com.beeper.mcp
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.media.MediaRecorder
 import android.os.Bundle
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -32,8 +35,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
-import android.Manifest
-import android.content.pm.PackageManager
+import androidx.lifecycle.lifecycleScope
+import com.beeper.mcp.data.api.ElevenLabsStt
+import kotlinx.coroutines.launch
 import java.io.File
 import java.io.IOException
 
@@ -69,11 +73,19 @@ fun AudioRecordScreen(modifier: Modifier = Modifier) {
 
     // Function to call after recording (empty for now, add API later)
     fun processRecordedAudio(filePath: String) {
-        // TODO: api call with audio path to 11labs stt and get audio transcription of the question
-        // TODO: query the local mcp server for tools, add tool definitions to request along with transcription and sys prompt and make call to somoe AI provider and get the tool call resp
-        // TODO: call the local mcp server with tool calls and add the results to new request to some AI provider and get back the final response
-        // TODO: api call with final response to 11labs tts and get the audio back
+        val apiKey = BuildConfig.ELEVENLABS_API_KEY
+        Log.d("AudioRecorder", "ELEVENLABS_API_KEY: $apiKey") // DEBUG: Log the API key
         Toast.makeText(context, "Recorded file: $filePath", Toast.LENGTH_SHORT).show()
+        if (context is ComponentActivity) {
+            context.lifecycleScope.launch {
+                try {
+                    val transcription = ElevenLabsStt.speechToText(context, apiKey, File(filePath))
+                    Log.d("AudioRecorder", "STT transcription: $transcription")
+                } catch (e: Exception) {
+                    Log.e("AudioRecorder", "STT call failed: ${e.message}")
+                }
+            }
+        }
     }
 
     // Full-screen content: either a permission request UI or the recorder
