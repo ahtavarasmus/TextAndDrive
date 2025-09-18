@@ -19,6 +19,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "TextAndDrive"
+rootProject.name = "beeper-mcp"
 include(":app")
  

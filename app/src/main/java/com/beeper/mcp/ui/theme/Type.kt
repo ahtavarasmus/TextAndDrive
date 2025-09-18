@@ -1,4 +1,4 @@
-package com.example.textanddrive.ui.theme
+package com.beeper.mcp.ui.theme
 
 import androidx.compose.material3.Typography
 import androidx.compose.ui.text.TextStyle
