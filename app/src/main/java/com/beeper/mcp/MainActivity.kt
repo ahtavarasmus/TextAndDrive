@@ -63,7 +63,7 @@ class MainActivity : ComponentActivity() {
         serviceName = "beeper-mcp-server",
         localIpAddress = "Getting IP address..."
     ))
-    
+
     private val beeperPermissions = mutableListOf(
         "com.beeper.android.permission.READ_PERMISSION",
         "com.beeper.android.permission.SEND_PERMISSION"
@@ -73,15 +73,16 @@ class MainActivity : ComponentActivity() {
             add(Manifest.permission.POST_NOTIFICATIONS)
         }
     }.toTypedArray()
-    
+
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
         permissionsGranted = permissions.values.all { it }
         Log.d("MainActivity", "Permission results: $permissions, all granted: $permissionsGranted")
-        
+
         // Start service if permissions were just granted and service isn't running
-        if (permissionsGranted && !serviceStatus.isRunning) {
+        // Only start/bind service automatically when we also have battery optimization exemption
+        if (permissionsGranted && batteryOptimized && !serviceStatus.isRunning) {
             startMcpService()
             bindToMcpService()
         }
@@ -90,62 +91,67 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        
+
         // Check permissions status
         checkBeeperPermissions()
-        
+
         // Check battery optimization status
         checkBatteryOptimization()
-        
-        // Only start service if permissions are granted
-        if (permissionsGranted) {
+
+        // Only start service if permissions are granted AND battery optimization exemption is present
+        if (permissionsGranted && batteryOptimized) {
             // Start MCP service
             startMcpService()
-            
+
             // Bind to service to get status updates
             bindToMcpService()
         } else {
-            Log.d("MainActivity", "Not starting service - permissions not granted")
+            Log.d("MainActivity", "Not starting service - missing permissions or battery exemption")
         }
-        
+
         setContent {
             BeeperMcpTheme {
-                Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    McpServerStatus(
-                        permissionsGranted = permissionsGranted,
-                        batteryOptimized = batteryOptimized,
-                        serviceStatus = serviceStatus,
-                        modifier = Modifier.padding(innerPadding),
-                        onRequestPermissions = { requestBeeperPermissions() },
-                        onRequestBatteryOptimization = { requestBatteryOptimizationExemption() },
-                        onStartService = { startMcpService() },
-                        onStopService = { stopMcpService() }
-                    )
+                // Open the audio recorder view only when permissions, battery exemption, and service are active.
+                if (permissionsGranted && batteryOptimized && serviceStatus.isRunning) {
+                    AudioRecordScreen(modifier = Modifier.fillMaxSize())
+                } else {
+                    Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+                        McpServerStatus(
+                            permissionsGranted = permissionsGranted,
+                            batteryOptimized = batteryOptimized,
+                            serviceStatus = serviceStatus,
+                            modifier = Modifier.padding(innerPadding),
+                            onRequestPermissions = { requestBeeperPermissions() },
+                            onRequestBatteryOptimization = { requestBatteryOptimizationExemption() },
+                            onStartService = { startMcpService() },
+                            onStopService = { stopMcpService() }
+                        )
+                    }
                 }
             }
         }
     }
-    
+
     private fun checkBeeperPermissions() {
         val permissionsToRequest = beeperPermissions.filter { permission ->
             ContextCompat.checkSelfPermission(this, permission) != PackageManager.PERMISSION_GRANTED
         }
-        
+
         permissionsGranted = permissionsToRequest.isEmpty()
         Log.d("MainActivity", "Permissions status - All granted: $permissionsGranted")
     }
-    
+
     private fun requestBeeperPermissions() {
         val permissionsToRequest = beeperPermissions.filter { permission ->
             ContextCompat.checkSelfPermission(this, permission) != PackageManager.PERMISSION_GRANTED
         }
-        
+
         if (permissionsToRequest.isNotEmpty()) {
             Log.d("MainActivity", "Requesting permissions: $permissionsToRequest")
             permissionLauncher.launch(permissionsToRequest.toTypedArray())
         }
     }
-    
+
     private fun startMcpService() {
         val intent = Intent(this, McpService::class.java).apply {
             action = McpService.ACTION_START_SERVICE
@@ -159,12 +165,12 @@ class MainActivity : ComponentActivity() {
             bindToMcpService()
         }
     }
-    
+
     private fun stopMcpService() {
         val intent = Intent(this, McpService::class.java).apply {
             action = McpService.ACTION_STOP_SERVICE
         }
-        
+
         // Use startForegroundService for Android O+ to properly communicate with foreground service
         startForegroundService(intent)
 
@@ -174,17 +180,17 @@ class MainActivity : ComponentActivity() {
             isBound = false
             mcpService = null
         }
-        
+
         // Update UI to reflect stopped state
         serviceStatus = McpService.ServiceStatus(
             isRunning = false,
             serviceName = "beeper-mcp-server",
             localIpAddress = serviceStatus.localIpAddress
         )
-        
+
         Log.d("MainActivity", "Sent stop command to MCP service")
     }
-    
+
     private fun bindToMcpService() {
         if (!isBound) {
             val intent = Intent(this, McpService::class.java)
@@ -196,7 +202,7 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
-    
+
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
             val binder = service as McpService.McpBinder
@@ -205,26 +211,26 @@ class MainActivity : ComponentActivity() {
             updateServiceStatus()
             Log.d("MainActivity", "Bound to MCP service")
         }
-        
+
         override fun onServiceDisconnected(name: ComponentName?) {
             mcpService = null
             isBound = false
             Log.d("MainActivity", "Unbound from MCP service")
         }
     }
-    
+
     private fun updateServiceStatus() {
         mcpService?.let { service ->
             serviceStatus = service.getServiceStatus()
         }
     }
-    
+
     private fun checkBatteryOptimization() {
         val powerManager = getSystemService(POWER_SERVICE) as PowerManager
         batteryOptimized = powerManager.isIgnoringBatteryOptimizations(packageName)
         Log.d("MainActivity", "Battery optimization exempt: $batteryOptimized")
     }
-    
+
     private fun requestBatteryOptimizationExemption() {
         val powerManager = getSystemService(POWER_SERVICE) as PowerManager
         if (!powerManager.isIgnoringBatteryOptimizations(packageName)) {
@@ -250,7 +256,7 @@ class MainActivity : ComponentActivity() {
             isBound = false
         }
     }
-    
+
     override fun onResume() {
         super.onResume()
         if (isBound) {
@@ -285,7 +291,7 @@ fun McpServerStatus(
             style = MaterialTheme.typography.headlineMedium,
             modifier = Modifier.padding(bottom = 24.dp)
         )
-        
+
         // Status Table
         Card(
             modifier = Modifier.fillMaxWidth(),
@@ -306,9 +312,9 @@ fun McpServerStatus(
                     showButton = !permissionsGranted,
                     onButtonClick = onRequestPermissions
                 )
-                
+
                 Divider(modifier = Modifier.padding(vertical = 12.dp))
-                
+
                 // Battery Optimization Row
                 StatusRow(
                     label = "Battery Status",
@@ -318,9 +324,9 @@ fun McpServerStatus(
                     showButton = !batteryOptimized,
                     onButtonClick = onRequestBatteryOptimization
                 )
-                
+
                 Divider(modifier = Modifier.padding(vertical = 12.dp))
-                
+
                 // Service Status Row
                 StatusRow(
                     label = "Service Status",
@@ -332,11 +338,11 @@ fun McpServerStatus(
                 )
             }
         }
-        
+
         // Connection Info
         if (serviceStatus.isRunning) {
             Spacer(modifier = Modifier.height(24.dp))
-            
+
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(
@@ -352,14 +358,14 @@ fun McpServerStatus(
                         color = Color.White,
                         modifier = Modifier.padding(bottom = 12.dp)
                     )
-                    
+
                     Text(
                         text = "Add to Claude:",
                         style = MaterialTheme.typography.bodyMedium,
                         color = Color(0xFFB0B0B0),
                         modifier = Modifier.padding(bottom = 8.dp)
                     )
-                    
+
                     Text(
                         text = "$ claude mcp add --transport sse \\\n  beeper-android \\\n  http://${serviceStatus.localIpAddress}:8081",
                         style = MaterialTheme.typography.bodySmall,
@@ -376,7 +382,7 @@ fun McpServerStatus(
                 }
             }
         }
-        
+
         // Warning message
         Spacer(modifier = Modifier.height(16.dp))
         Text(
@@ -418,7 +424,7 @@ fun StatusRow(
                 modifier = Modifier.padding(top = 4.dp)
             )
         }
-        
+
         if (showButton) {
             Button(
                 onClick = onButtonClick,
@@ -451,3 +457,4 @@ fun McpServerPreview() {
         )
     }
 }
+
