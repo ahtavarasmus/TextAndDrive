@@ -8,31 +8,22 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.beeper.mcp.ui.theme.BeeperMcpTheme
-import java.net.NetworkInterface
+
+const val BEEPER_AUTHORITY = "com.beeper.api"
 
 class MainActivity : ComponentActivity() {
-    private var mcpServer: McpServer? = null
     private var permissionsGranted by mutableStateOf(false)
-    private var localIpAddress by mutableStateOf("Getting IP address...")
-    private var serviceStatus by mutableStateOf(ServiceStatus(
-        isRunning = false,
-        serviceName = "beeper-mcp-server",
-        localIpAddress = "Getting IP address..."
-    ))
 
     private val beeperPermissions = mutableListOf(
         "com.beeper.android.permission.READ_PERMISSION",
@@ -47,16 +38,12 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
         permissionsGranted = permissions.values.all { it }
-        if (permissionsGranted) {
-            startMcpServer() // Start server immediately after granting permissions
-        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         checkBeeperPermissions()
-        getLocalIpAddress()
 
         setContent {
             BeeperMcpTheme {
@@ -64,9 +51,8 @@ class MainActivity : ComponentActivity() {
                     if (permissionsGranted) {
                         AudioRecordScreen(modifier = Modifier.padding(innerPadding))
                     } else {
-                        McpServerStatus(
+                        PermissionStatus(
                             permissionsGranted = permissionsGranted,
-                            serviceStatus = serviceStatus,
                             modifier = Modifier.padding(innerPadding),
                             onRequestPermissions = { requestBeeperPermissions() }
                         )
@@ -78,15 +64,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        if (permissionsGranted) {
-            startMcpServer()
-        }
         checkBeeperPermissions() // Re-check on resume
-    }
-
-    override fun onPause() {
-        super.onPause()
-        stopMcpServer()
     }
 
     private fun checkBeeperPermissions() {
@@ -103,67 +81,17 @@ class MainActivity : ComponentActivity() {
             permissionLauncher.launch(permissionsToRequest)
         }
     }
-
-    private fun startMcpServer() {
-        if (mcpServer == null) {
-            mcpServer = McpServer(this)
-            mcpServer?.start()
-            updateServiceStatus(true)
-        }
-    }
-
-    private fun stopMcpServer() {
-        mcpServer?.stop()
-        mcpServer = null
-        updateServiceStatus(false)
-    }
-
-    private fun updateServiceStatus(isRunning: Boolean) {
-        serviceStatus = ServiceStatus(
-            isRunning = isRunning,
-            serviceName = "beeper-mcp-server",
-            localIpAddress = localIpAddress
-        )
-    }
-
-    private fun getLocalIpAddress() {
-        try {
-            val interfaces = NetworkInterface.getNetworkInterfaces()
-            while (interfaces.hasMoreElements()) {
-                val networkInterface = interfaces.nextElement()
-                if (!networkInterface.isLoopback && networkInterface.isUp) {
-                    val addresses = networkInterface.inetAddresses
-                    while (addresses.hasMoreElements()) {
-                        val address = addresses.nextElement()
-                        if (!address.isLoopbackAddress && address.hostAddress?.contains(':') == false) {
-                            localIpAddress = address.hostAddress ?: "unknown"
-                            return
-                        }
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            localIpAddress = "127.0.0.1"
-        }
-    }
 }
 
-data class ServiceStatus(
-    val isRunning: Boolean,
-    val serviceName: String,
-    val localIpAddress: String
-)
-
 @Composable
-fun McpServerStatus(
+fun PermissionStatus(
     modifier: Modifier = Modifier,
     permissionsGranted: Boolean = false,
-    serviceStatus: ServiceStatus = ServiceStatus(false, "beeper-mcp-server", "Getting IP address..."),
     onRequestPermissions: () -> Unit = {}
 ) {
     Column(modifier = modifier.padding(16.dp)) {
         Text(
-            text = "🤖 Beeper MCP Server",
+            text = "🤖 Beeper Tools",
             style = MaterialTheme.typography.headlineMedium,
             modifier = Modifier.padding(bottom = 24.dp)
         )
@@ -184,41 +112,10 @@ fun McpServerStatus(
                 )
             }
         }
-        // Connection Info (show always, but indicate if running)
-        Spacer(modifier = Modifier.height(24.dp))
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E))
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    text = "Connection Info",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = Color.White,
-                    modifier = Modifier.padding(bottom = 12.dp)
-                )
-                Text(
-                    text = "Add to Claude:",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = Color(0xFFB0B0B0),
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
-                Text(
-                    text = "$ claude mcp add --transport sse \\\n beeper-android \\\n http://${serviceStatus.localIpAddress}:8081",
-                    style = MaterialTheme.typography.bodySmall,
-                    fontFamily = FontFamily.Monospace,
-                    color = Color(0xFF00FF00),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(color = Color(0xFF0D0D0D), shape = RoundedCornerShape(4.dp))
-                        .padding(12.dp)
-                )
-            }
-        }
-        // Warning message
+        // Warning message (optional, removed server-specific warning)
         Spacer(modifier = Modifier.height(16.dp))
         Text(
-            text = "⚠️ Authentication not implemented",
+            text = "⚠️ Ensure Beeper app is installed and running",
             style = MaterialTheme.typography.bodyMedium,
             color = Color(0xFFFF9800),
             textAlign = TextAlign.Center,

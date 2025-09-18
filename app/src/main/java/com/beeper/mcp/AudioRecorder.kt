@@ -18,7 +18,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.tooling.preview.Preview
@@ -29,7 +28,6 @@ import com.beeper.mcp.data.api.ElevenLabsStt
 import kotlinx.coroutines.launch
 import java.io.File
 import java.io.IOException
-import java.net.NetworkInterface
 
 class AudioRecorderActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -80,19 +78,6 @@ fun AudioRecordScreen(modifier: Modifier = Modifier) {
         color = MaterialTheme.colorScheme.background
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // New: Display server status at top
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF1E1E1E))
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("MCP Server Running", color = Color.White, style = MaterialTheme.typography.titleMedium)
-                    Text("IP: ${context.getLocalIpAddress()}:8081", color = Color(0xFF00FF00))
-                }
-            }
-
             if (!micPermissionGranted) {
                 // Show an explicit UI asking the user to grant microphone permission
                 Column(
@@ -186,26 +171,4 @@ fun TextAndDriveTheme(content: @Composable () -> Unit) {
     MaterialTheme {
         content()
     }
-}
-
-// Extension function for getLocalIpAddress (copied from MainActivity for independence)
-fun Context.getLocalIpAddress(): String {
-    try {
-        val interfaces = NetworkInterface.getNetworkInterfaces()
-        while (interfaces.hasMoreElements()) {
-            val networkInterface = interfaces.nextElement()
-            if (!networkInterface.isLoopback && networkInterface.isUp) {
-                val addresses = networkInterface.inetAddresses
-                while (addresses.hasMoreElements()) {
-                    val address = addresses.nextElement()
-                    if (!address.isLoopbackAddress && address.hostAddress?.contains(':') == false) {
-                        return address.hostAddress ?: "unknown"
-                    }
-                }
-            }
-        }
-    } catch (e: Exception) {
-        return "127.0.0.1"
-    }
-    return "127.0.0.1"
 }

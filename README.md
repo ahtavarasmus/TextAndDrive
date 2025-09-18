@@ -1,11 +1,11 @@
-# Beeper MCP Server
+# TextAndDrive
 
-An Android MCP (Model Context Protocol) server that provides access to Beeper chat data for AI assistants. This server exposes Beeper's chats, contacts, and messaging capabilities through an MCP interface.
+An Android app that allows voice chatting with your chat apps while driving without having to look at the phone screen. It integrates with Beeper to enable hands-free messaging: speak to send messages, and have incoming messages read aloud via text-to-speech.
 
 ## Prerequisites
 
 - **Android device** with Beeper Android app installed
-- **Same device requirement**: This MCP server must be installed on the same Android device as Beeper
+- **Same device requirement**: This app must be installed on the same Android device as Beeper
 - Android 8.0 (API level 26) or higher
 - Android Studio or build tools for compilation
 
@@ -13,8 +13,8 @@ An Android MCP (Model Context Protocol) server that provides access to Beeper ch
 
 ### 1. Clone the Repository
 ```bash
-git clone https://github.com/your-repo/beeper-mcp.git
-cd beeper-mcp
+git clone https://github.com/ahtavarasmus/TextAndDrive.git
+cd TextAndDrive
 ```
 
 ### 2. Connect Your Device
@@ -22,6 +22,11 @@ cd beeper-mcp
 2. Enable **Developer Options** and **USB Debugging**
 
 ### 3. Build and Install
+
+#### Add 11Labs api key to root local.properties
+```
+ELEVENLABS_API_KEY=
+```
 
 #### Option A: Command Line
 ```bash
@@ -36,31 +41,24 @@ cd beeper-mcp
 ## Setup and Usage
 
 ### 1. Grant Permissions
-After installation, open the Beeper MCP Server app and:
+After installation, open the TextAndDrive app and:
 - Grant **Beeper permissions** (read/send access)
-- **Disable battery optimization** for the app (recommended)
-- The service will start automatically once permissions are granted
+- Grant **Microphone permission** (for speech-to-text input)
+- Once permissions are granted, you're all set! The app can now handle voice interactions with Beeper.
 
-### 2. Connect to Claude
-Once the server is running, add it to Claude Code:
+### 2. Using the App
+- Hold the screen to record your voice message (speech-to-text via ElevenLabs).
+- The app will process and send messages through Beeper.
+- Incoming messages can be read aloud (text-to-speech support via ElevenLabs).
 
-```bash
-claude mcp add --transport sse beeper-android http://[DEVICE_IP]:8081
-```
+## Features
 
-Replace `[DEVICE_IP]` with your Android device's IP address (shown in the app).
-
-## Available MCP Tools
-
-- **get_chats** - Retrieve chats with filtering options
-- **get_contacts** - Retrieve contacts with filtering options  
-- **get_messages** - Retrieve messages with search capabilities
-- **send_message** - Send messages to specific chats
+- **Voice Input**: Record and send messages hands-free.
+- **Message Reading**: Have chats, contacts, and messages read aloud.
+- **Chat Management**: Retrieve and interact with chats, contacts, and messages via voice commands.
 
 ## Important Notes
 
-- **Device Requirement**: The MCP server must run on the same Android device as Beeper to access the content provider
-- **Network Access**: Ensure your device and Claude Code client are on the same network
-- **Permissions**: Beeper permissions are required for the server to function
-- **Battery**: Consider disabling battery optimization to prevent the service from being killed
-
+- **Device Requirement**: The app must run on the same Android device as Beeper to access chat data
+- **Permissions**: Beeper read/send and microphone permissions are required for voice chatting
+- **Safety First**: Always prioritize safe driving—use this app responsibly and in compliance with local laws
