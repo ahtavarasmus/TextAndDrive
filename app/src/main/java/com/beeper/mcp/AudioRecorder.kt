@@ -74,6 +74,7 @@ fun AudioRecordScreen(modifier: Modifier = Modifier) {
     // Function to call after recording
     fun processRecordedAudio(filePath: String) {
         val ApiKey = BuildConfig.TINFOIL_API_KEY
+        val elevenApiKey = BuildConfig.ELEVENLABS_API_KEY
         if (context is ComponentActivity) {
             context.lifecycleScope.launch {
                 try {
@@ -99,7 +100,6 @@ fun AudioRecordScreen(modifier: Modifier = Modifier) {
                         }
                     } catch (chatsEx: Exception) {
                         Log.e("AudioRecorder", "getChatsFormatted failed: ${chatsEx.message}")
-                        chatsContext = "Error retrieving chats: ${chatsEx.message}"
                     }
 
                     // Send transcript to LLM with tools and chats context
@@ -120,7 +120,6 @@ fun AudioRecordScreen(modifier: Modifier = Modifier) {
                             appendLine("User transcript: $transcription")
                             appendLine()
                             appendLine("Available chats context:")
-                            append(chatsContext)
                         }
 
                         Log.d("AudioRecorder", "Sending enhanced transcript with chats context to LLM")
@@ -326,18 +325,30 @@ fun AudioRecordScreen(modifier: Modifier = Modifier) {
                         .pointerInput(Unit) {
                             detectTapGestures(
                                 onPress = {
-                                    if (!isRecording) {
-                                        try {
-                                            outputFile = File.createTempFile("audio", ".wav", context.cacheDir)
-                                            isRecording = true
-                                            if (context is ComponentActivity) {
-                                                recordingJob = context.lifecycleScope.launch(Dispatchers.IO) {
-                                                    recordAudioToWav(context, outputFile!!) { isRecording }
+                                    // Ensure we still have permission at the moment of starting
+                                    val hasPermission = ContextCompat.checkSelfPermission(
+                                        context,
+                                        Manifest.permission.RECORD_AUDIO
+                                    ) == PackageManager.PERMISSION_GRANTED
+
+                                    if (!hasPermission) {
+                                        // Ask for permission again
+                                        permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                                        Toast.makeText(context, "Microphone permission required", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        if (!isRecording) {
+                                            try {
+                                                outputFile = File.createTempFile("audio", ".wav", context.cacheDir)
+                                                isRecording = true
+                                                if (context is ComponentActivity) {
+                                                    recordingJob = context.lifecycleScope.launch(Dispatchers.IO) {
+                                                        recordAudioToWav(context, outputFile!!) { isRecording }
+                                                    }
                                                 }
+                                            } catch (e: IOException) {
+                                                Log.e("AudioRecorder", "Failed to start: ${e.message}")
+                                                isRecording = false
                                             }
-                                        } catch (e: IOException) {
-                                            Log.e("AudioRecorder", "Failed to start: ${e.message}")
-                                            isRecording = false
                                         }
                                     }
                                     tryAwaitRelease()
@@ -368,26 +379,61 @@ suspend fun recordAudioToWav(context: Context, outputFile: File, isRecording: ()
     val sampleRate = 16000
     val channelConfig = AudioFormat.CHANNEL_IN_MONO
     val audioFormat = AudioFormat.ENCODING_PCM_16BIT
-    val minBufferSize = AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioFormat)
-    val audioRecord = AudioRecord(
-        MediaRecorder.AudioSource.MIC,
-        sampleRate,
-        channelConfig,
-        audioFormat,
-        minBufferSize * 2
-    )
-
+    var audioRecord: AudioRecord? = null
+    var minBufferSize = 0
     try {
+        minBufferSize = AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioFormat)
+        if (minBufferSize == AudioRecord.ERROR || minBufferSize == AudioRecord.ERROR_BAD_VALUE) {
+            Log.e("AudioRecorder", "Invalid buffer size returned: $minBufferSize")
+            return
+        }
+
+        audioRecord = AudioRecord(
+            MediaRecorder.AudioSource.MIC,
+            sampleRate,
+            channelConfig,
+            audioFormat,
+            minBufferSize * 2
+        )
+
+        if (audioRecord.state != AudioRecord.STATE_INITIALIZED) {
+            Log.e("AudioRecorder", "AudioRecord not initialized (state=${audioRecord.state})")
+            audioRecord.release()
+            return
+        }
+
         val baos = ByteArrayOutputStream()
-        audioRecord.startRecording()
+
+        try {
+            audioRecord.startRecording()
+        } catch (se: SecurityException) {
+            Log.e("AudioRecorder", "startRecording denied by SecurityException: ${se.message}")
+            withContext(Dispatchers.Main) {
+                Toast.makeText(context, "Microphone permission denied", Toast.LENGTH_SHORT).show()
+            }
+            return
+        }
+
         while (isRecording()) {
             val buffer = ByteArray(minBufferSize)
-            val read = audioRecord.read(buffer, 0, minBufferSize)
+            val read = try {
+                audioRecord.read(buffer, 0, buffer.size)
+            } catch (se: SecurityException) {
+                Log.e("AudioRecorder", "read denied by SecurityException: ${se.message}")
+                break
+            }
             if (read > 0) {
                 baos.write(buffer, 0, read)
             }
         }
-        audioRecord.stop()
+
+        try {
+            audioRecord.stop()
+        } catch (e: IllegalStateException) {
+            Log.w("AudioRecorder", "stop() called in illegal state: ${e.message}")
+        } catch (se: SecurityException) {
+            Log.e("AudioRecorder", "stop denied by SecurityException: ${se.message}")
+        }
 
         // Get raw PCM data
         val rawData = baos.toByteArray()
@@ -402,10 +448,19 @@ suspend fun recordAudioToWav(context: Context, outputFile: File, isRecording: ()
                 fos.write(rawData)
             }
         }
+    } catch (se: SecurityException) {
+        Log.e("AudioRecorder", "Recording failed due to SecurityException: ${se.message}")
+        withContext(Dispatchers.Main) {
+            Toast.makeText(context, "Microphone permission denied", Toast.LENGTH_SHORT).show()
+        }
     } catch (e: Exception) {
         Log.e("AudioRecorder", "Recording failed: ${e.message}")
     } finally {
-        audioRecord.release()
+        try {
+            audioRecord?.release()
+        } catch (e: Exception) {
+            // ignore
+        }
     }
 }
 
