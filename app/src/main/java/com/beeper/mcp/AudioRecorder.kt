@@ -62,13 +62,12 @@ fun AudioRecordScreen(modifier: Modifier = Modifier) {
     }
     // Function to call after recording (empty for now, add API later)
     fun processRecordedAudio(filePath: String) {
-        val elevenApiKey = BuildConfig.TINFOIL_API_KEY
-        Log.d("AudioRecorder", "ELEVENLABS_API_KEY: ${if (elevenApiKey.isNullOrBlank()) "<missing>" else "<redacted>"}") // avoid logging key
+        val ApiKey = BuildConfig.TINFOIL_API_KEY
         // Removed user-facing toast for recorded file path to avoid alert after recording
         if (context is ComponentActivity) {
             context.lifecycleScope.launch {
                 try {
-                    val transcription = STT.speechToText(context, elevenApiKey, File(filePath))
+                    val transcription = STT.speechToText(ApiKey, File(filePath))
                     Log.d("AudioRecorder", "STT transcription: $transcription")
 
                     // Call the normal getChatsFormatted function and log results
@@ -169,10 +168,9 @@ fun AudioRecordScreen(modifier: Modifier = Modifier) {
                         .pointerInput(Unit) {
                             detectTapGestures(
                                 onPress = {
-                                    // Start recording on press down
                                     if (!isRecording) {
                                         try {
-                                            outputFile = File.createTempFile("audio", ".mp4", context.cacheDir)
+                                            outputFile = File.createTempFile("audio", ".m4a", context.cacheDir)
                                             recorder = MediaRecorder().apply {
                                                 setAudioSource(MediaRecorder.AudioSource.MIC)
                                                 setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
@@ -182,22 +180,24 @@ fun AudioRecordScreen(modifier: Modifier = Modifier) {
                                                 start()
                                             }
                                             isRecording = true
-                                            // Removed user-facing toast for recording start
                                         } catch (e: IOException) {
-                                            Toast.makeText(context, "Failed to start recording", Toast.LENGTH_SHORT).show()
+                                            Log.e("AudioRecorder", "Failed to start: ${e.message}")
                                         }
                                     }
-                                    // Wait for release
                                     tryAwaitRelease()
-                                    // Stop recording on release
                                     if (isRecording) {
                                         recorder?.apply {
-                                            stop()
+                                            try {
+                                                stop()
+                                            } catch (e: RuntimeException) {
+                                                Log.e("AudioRecorder", "Stop failed: ${e.message}")
+                                            }
                                             release()
                                         }
                                         recorder = null
                                         isRecording = false
                                         outputFile?.let { file ->
+                                            Log.d("AudioRecorder", "Recorded file size: ${file.length()} bytes")
                                             processRecordedAudio(file.absolutePath)
                                         }
                                     }

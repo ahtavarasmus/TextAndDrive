@@ -70,6 +70,7 @@ android {
 
 dependencies {
 
+    implementation("com.squareup.okhttp3:okhttp:5.0.0-alpha.14")
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
