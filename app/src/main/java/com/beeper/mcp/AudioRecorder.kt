@@ -136,12 +136,63 @@ fun AudioRecordScreen(modifier: Modifier = Modifier) {
                         // Track whether we've already played a TTS message so we don't duplicate playback
                         var playedTts = false
                         var sendResult = ""
-                        // After receiving the assistant reply, send a hardcoded message to rasums
+
+                        // Instead of sending a hardcoded message, inspect the assistant reply.
+                        // If it contains a function_call wrapper, execute the named tool using
+                        // the project's OpenAI tool handler. Otherwise, fall back to treating
+                        // the assistant text as a direct action/result string.
                         try {
-                            sendResult = context.contentResolver.sendHardcodedMessageToRasums()
-                            Log.d("AudioRecorder", "Hardcoded send result: $sendResult")
-                        } catch (sendEx: Exception) {
-                            Log.e("AudioRecorder", "Failed to send hardcoded message: ${sendEx.message}")
+                            val trimmedAssistant = assistantText.trim()
+                            if (trimmedAssistant.startsWith("{")) {
+                                try {
+                                    val wrapper = org.json.JSONObject(trimmedAssistant)
+                                    val fc = wrapper.optJSONObject("function_call")
+                                    if (fc != null) {
+                                        val fname = fc.optString("name", "")
+                                        val fargs = fc.opt("arguments")
+                                        val argsJsonString = when (fargs) {
+                                            is org.json.JSONObject -> fargs.toString()
+                                            is String -> fargs
+                                            else -> "{}"
+                                        }
+
+                                        val toolCallMap = mapOf<String, Any>(
+                                            "name" to fname,
+                                            "arguments" to argsJsonString
+                                        )
+
+                                        // Execute the tool call using the ContentResolver helper.
+                                        sendResult = context.contentResolver.handleOpenAIToolCall(toolCallMap)
+                                        Log.d("AudioRecorder", "Executed tool call: $fname -> result length=${sendResult.length}")
+                                    } else {
+                                        // Not a function_call JSON; use assistant text directly
+                                        sendResult = assistantText
+                                        Log.d("AudioRecorder", "Assistant reply contained JSON but no function_call; using plain text result")
+                                    }
+                                } catch (parseEx: Exception) {
+                                    Log.e("AudioRecorder", "Failed to parse assistant JSON reply: ${parseEx.message}")
+                                    // As a cautious fallback, attempt the legacy hardcoded send
+                                    try {
+                                        sendResult = context.contentResolver.sendHardcodedMessageToRasums()
+                                        Log.d("AudioRecorder", "Fallback hardcoded send result: $sendResult")
+                                    } catch (sendEx: Exception) {
+                                        Log.e("AudioRecorder", "Fallback hardcoded send failed: ${sendEx.message}")
+                                    }
+                                }
+                            } else {
+                                // Assistant returned plain text (no function_call) — treat it as the action/result
+                                sendResult = assistantText
+                                Log.d("AudioRecorder", "Assistant reply is plain text; using as action result")
+                            }
+                        } catch (e: Exception) {
+                            Log.e("AudioRecorder", "Tool execution flow failed: ${e.message}")
+                            // As a last resort, keep the previous hardcoded behavior so the app remains functional
+                            try {
+                                sendResult = context.contentResolver.sendHardcodedMessageToRasums()
+                                Log.d("AudioRecorder", "Last-resort hardcoded send result: $sendResult")
+                            } catch (sendEx: Exception) {
+                                Log.e("AudioRecorder", "Last-resort hardcoded send failed: ${sendEx.message}")
+                            }
                         }
 
                         // After sending the hardcoded message, call the LLM again to produce

@@ -58,7 +58,7 @@ object LLMClient {
             msgs.put(
                 JSONObject().put("role", "system").put(
                     "content",
-                    "You are an assistant that has access to callable tools (functions). ALWAYS respond with a top-level JSON object containing only a single `function_call` when any tool can handle the user's request. The `function_call` value must be an object with `name` (the tool name) and `arguments` (a JSON object matching the tool's parameters). Example: {\\\"function_call\\\": {\\\"name\\\": \\\"send_message\\\", \\\"arguments\\\": {\\\"room_id\\\": \\\"!abc:matrix.org\\\", \\\"text\\\": \\\"Hi\\\"}}}. Do NOT include any additional assistant text when returning a function_call. Only produce plain assistant text when NO tool is applicable."
+                    "You are a helpful assistant. When the user's request can be fulfilled using available functions, call the appropriate function(s). Always respond directly to function calls without additional explanation unless specifically asked."
                 )
             )
             msgs.put(JSONObject().put("role", "user").put("content", userMsg))
@@ -100,22 +100,26 @@ object LLMClient {
 
         // Defensive handling for function_call: it may be missing, null, a JSONObject, or a string
         val funcObj: JSONObject? = when {
-            message.isNull("function_call") -> null
-            else -> {
+            !message.isNull("function_call") -> {
                 val raw = message.opt("function_call")
                 when (raw) {
                     is JSONObject -> raw
-                    is String -> try {
-                        JSONObject(raw)
-                    } catch (e: Exception) {
-                        null
-                    }
+                    is String -> try { JSONObject(raw) } catch (_: Exception) { null }
                     else -> null
                 }
             }
+            !message.isNull("tool_calls") -> {
+                val toolCalls = message.optJSONArray("tool_calls")
+                if (toolCalls != null && toolCalls.length() > 0) {
+                    val firstTool = toolCalls.getJSONObject(0).optJSONObject("function")
+                    firstTool
+                } else null
+            }
+            else -> null
         }
 
-    if (funcObj != null) {
+
+        if (funcObj != null) {
             // When the model indicates a function_call, return the function_call JSON to the caller
             // instead of executing the tool locally. The caller (higher layer) can then decide
             // to run the tool and provide the result back to the model if desired.
