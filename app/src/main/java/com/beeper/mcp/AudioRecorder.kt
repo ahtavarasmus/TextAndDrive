@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.lifecycleScope
 import androidx.core.content.ContextCompat
 import com.beeper.mcp.data.api.ElevenLabsStt
+import com.beeper.mcp.data.api.ElevenLabsTts
 import kotlinx.coroutines.launch
 import java.io.File
 import java.io.IOException
@@ -60,12 +61,22 @@ fun AudioRecordScreen(modifier: Modifier = Modifier) {
     fun processRecordedAudio(filePath: String) {
         val apiKey = BuildConfig.ELEVENLABS_API_KEY
         Log.d("AudioRecorder", "ELEVENLABS_API_KEY: $apiKey") // DEBUG: Log the API key
-        Toast.makeText(context, "Recorded file: $filePath", Toast.LENGTH_SHORT).show()
+        // Removed user-facing toast for recorded file path to avoid alert after recording
         if (context is ComponentActivity) {
             context.lifecycleScope.launch {
                 try {
                     val transcription = ElevenLabsStt.speechToText(context, apiKey, File(filePath))
                     Log.d("AudioRecorder", "STT transcription: $transcription")
+
+                    // Convert the transcript to speech using ElevenLabsTts and play it back
+                    try {
+                        val voiceId = "5kMbtRSEKIkRZSdXxrZg"
+                        val ttsFile = ElevenLabsTts.textToSpeech(context, apiKey, voiceId, transcription)
+                        ElevenLabsTts.playFromFile(context, ttsFile)
+                    } catch (ttsEx: Exception) {
+                        Log.e("AudioRecorder", "TTS call/playback failed: ${ttsEx.message}")
+                    }
+
                 } catch (e: Exception) {
                     Log.e("AudioRecorder", "STT call failed: ${e.message}")
                 }
@@ -121,7 +132,7 @@ fun AudioRecordScreen(modifier: Modifier = Modifier) {
                                                 start()
                                             }
                                             isRecording = true
-                                            Toast.makeText(context, "Recording started", Toast.LENGTH_SHORT).show()
+                                            // Removed user-facing toast for recording start
                                         } catch (e: IOException) {
                                             Toast.makeText(context, "Failed to start recording", Toast.LENGTH_SHORT).show()
                                         }
@@ -139,7 +150,6 @@ fun AudioRecordScreen(modifier: Modifier = Modifier) {
                                         outputFile?.let { file ->
                                             processRecordedAudio(file.absolutePath)
                                         }
-                                        Toast.makeText(context, "Recording stopped", Toast.LENGTH_SHORT).show()
                                     }
                                 }
                             )
