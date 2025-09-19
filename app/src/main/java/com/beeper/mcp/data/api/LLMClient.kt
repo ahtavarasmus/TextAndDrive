@@ -115,7 +115,7 @@ object LLMClient {
             }
         }
 
-        if (funcObj != null) {
+    if (funcObj != null) {
             // When the model indicates a function_call, return the function_call JSON to the caller
             // instead of executing the tool locally. The caller (higher layer) can then decide
             // to run the tool and provide the result back to the model if desired.
@@ -145,6 +145,17 @@ object LLMClient {
             return@withContext wrapper.toString()
         }
 
-        return@withContext message.optString("content", "")
+        // The model may explicitly set `content` to null (JSON null). org.json's
+        // optString() can return the literal string "null" when the value is
+        // JSONObject.NULL, which then shows up in logs as Assistant reply: null.
+        // Normalize that to an empty string so callers don't misinterpret it.
+        val content = if (!message.isNull("content")) {
+            val c = message.optString("content", "")
+            if (c == "null") "" else c
+        } else {
+            ""
+        }
+
+        return@withContext content
     }
 }

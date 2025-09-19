@@ -60,6 +60,7 @@ fun AudioRecordScreen(modifier: Modifier = Modifier) {
         }
     }
     // Function to call after recording (empty for now, add API later)
+    // Function to call after recording (updated to call getChatsFormatted and provide context to LLM)
     fun processRecordedAudio(filePath: String) {
         val elevenApiKey = BuildConfig.ELEVENLABS_API_KEY
         Log.d("AudioRecorder", "ELEVENLABS_API_KEY: ${if (elevenApiKey.isNullOrBlank()) "<missing>" else "<redacted>"}") // avoid logging key
@@ -70,41 +71,31 @@ fun AudioRecordScreen(modifier: Modifier = Modifier) {
                     val transcription = ElevenLabsStt.speechToText(context, elevenApiKey, File(filePath))
                     Log.d("AudioRecorder", "STT transcription: $transcription")
 
-                    // Call the normal getChatsFormatted function and log results
+                    // Get chats data to provide context to LLM
+                    var chatsContext = ""
                     try {
-                        Log.d("AudioRecorder", "Calling getChatsFormatted...")
+                        Log.d("AudioRecorder", "Calling getChatsFormatted for LLM context...")
                         val startTime = System.currentTimeMillis()
 
-                        // Create args map with default parameters (you can modify these as needed)
+                        // Create args map with default parameters
                         val args = mapOf<String, Any?>(
-                            "limit" to 10,
+                            "limit" to 20, // Get more chats for better context
                             "offset" to 0
-                            // Add other parameters as needed:
-                            // "isUnread" to 1,
-                            // "protocol" to "matrix",
-                            // etc.
                         )
 
-                        val chatsResult = context.contentResolver.getChatsFormatted(args)
+                        chatsContext = context.contentResolver.getChatsFormatted(args)
                         val duration = System.currentTimeMillis() - startTime
 
                         Log.d("AudioRecorder", "getChatsFormatted completed in ${duration}ms")
-                        Log.d("AudioRecorder", "Chats result length: ${chatsResult.length} characters")
-                        Log.d("AudioRecorder", "Chats result preview: ${chatsResult.take(500)}...")
-
-                        // Optionally log the full result (be careful with large outputs)
-                        if (chatsResult.length < 2000) {
-                            Log.d("AudioRecorder", "Full chats result:\n$chatsResult")
-                        }
+                        Log.d("AudioRecorder", "Chats result length: ${chatsContext.length} characters")
+                        Log.d("AudioRecorder", "Chats result preview: ${chatsContext.take(500)}...")
 
                     } catch (chatsEx: Exception) {
                         Log.e("AudioRecorder", "getChatsFormatted failed: ${chatsEx.message}")
-                        Log.e("AudioRecorder", "getChatsFormatted exception type: ${chatsEx.javaClass.simpleName}")
-                        chatsEx.printStackTrace()
+                        chatsContext = "Error retrieving chats: ${chatsEx.message}"
                     }
 
-                    // Convert the transcript to speech using ElevenLabsTts and play it back
-                    // Send transcript to LLM with tools. TINFOIL_API_KEY must be present in BuildConfig
+                    // Send transcript to LLM with tools and chats context
                     try {
                         val tinfoilKey = try { BuildConfig.TINFOIL_API_KEY } catch (_: Exception) { "" }
                         // Safer debug output: do NOT log the full API key. Log presence, length, a masked snippet, and a SHA-256 fingerprint.
@@ -117,10 +108,38 @@ fun AudioRecordScreen(modifier: Modifier = Modifier) {
                             } catch (e: Exception) { "<hash-error>" }
                             Log.d("AudioRecorder", "TINFOIL_API_KEY present: length=${tinfoilKey.length}, masked=$masked, sha256=$sha256")
                         }
-                        val assistantText = com.beeper.mcp.data.api.LLMClient
-                            .sendTranscriptWithTools(context, tinfoilKey, transcription, context.contentResolver)
+
+                        // Create enhanced transcript with chats context
+                        val enhancedTranscript = buildString {
+                            appendLine("User transcript: $transcription")
+                            appendLine()
+                            appendLine("Available chats context:")
+                            append(chatsContext)
+                        }
+
+                        Log.d("AudioRecorder", "Sending enhanced transcript with chats context to LLM")
+                        var assistantText = com.beeper.mcp.data.api.LLMClient
+                            .sendTranscriptWithTools(context, tinfoilKey, enhancedTranscript, context.contentResolver)
+
+                        // Defensive normalization: sometimes the LLM client returns the
+                        // literal string "null" (or a null reference). Normalize to empty
+                        // string so downstream code and logs are unambiguous.
+                        if (assistantText == null || assistantText == "null") {
+                            Log.d("AudioRecorder", "LLM returned null content; normalizing to empty string")
+                            assistantText = ""
+                        }
 
                         Log.d("AudioRecorder", "Assistant reply: $assistantText")
+
+//                    if (assistantText.isNotBlank()) {
+//                        try {
+//                            val voiceId = "5kMbtRSEKIkRZSdXxrZg"
+//                            val ttsFile = ElevenLabsTts.textToSpeech(context, elevenApiKey, voiceId, assistantText)
+//                            ElevenLabsTts.playFromFile(context, ttsFile)
+//                        } catch (ttsEx: Exception) {
+//                            Log.e("AudioRecorder", "TTS call/playback failed: ${ttsEx.message}")
+//                        }
+//                    }
 
                     } catch (ex: Exception) {
                         Log.e("AudioRecorder", "LLM tool flow failed: ${ex.message}")
