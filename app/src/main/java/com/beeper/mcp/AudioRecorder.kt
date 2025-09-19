@@ -26,6 +26,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.core.content.ContextCompat
 import com.beeper.mcp.data.api.ElevenLabsStt
 import com.beeper.mcp.data.api.ElevenLabsTts
+import com.beeper.mcp.data.api.STT
 import com.beeper.mcp.tools.getChatsFormatted
 import kotlinx.coroutines.launch
 import java.io.File
@@ -67,7 +68,7 @@ fun AudioRecordScreen(modifier: Modifier = Modifier) {
         if (context is ComponentActivity) {
             context.lifecycleScope.launch {
                 try {
-                    val transcription = ElevenLabsStt.speechToText(context, elevenApiKey, File(filePath))
+                    val transcription = STT.speechToText(context, elevenApiKey, File(filePath))
                     Log.d("AudioRecorder", "STT transcription: $transcription")
 
                     // Call the normal getChatsFormatted function and log results
