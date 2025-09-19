@@ -26,6 +26,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.core.content.ContextCompat
 import com.beeper.mcp.data.api.ElevenLabsStt
 import com.beeper.mcp.data.api.ElevenLabsTts
+import com.beeper.mcp.data.api.STT
 import com.beeper.mcp.tools.getChatsFormatted
 import kotlinx.coroutines.launch
 import java.io.File
@@ -62,13 +63,13 @@ fun AudioRecordScreen(modifier: Modifier = Modifier) {
     // Function to call after recording (empty for now, add API later)
     // Function to call after recording (updated to call getChatsFormatted and provide context to LLM)
     fun processRecordedAudio(filePath: String) {
-        val elevenApiKey = BuildConfig.ELEVENLABS_API_KEY
+        val elevenApiKey = BuildConfig.TINFOIL_API_KEY
         Log.d("AudioRecorder", "ELEVENLABS_API_KEY: ${if (elevenApiKey.isNullOrBlank()) "<missing>" else "<redacted>"}") // avoid logging key
         // Removed user-facing toast for recorded file path to avoid alert after recording
         if (context is ComponentActivity) {
             context.lifecycleScope.launch {
                 try {
-                    val transcription = ElevenLabsStt.speechToText(context, elevenApiKey, File(filePath))
+                    val transcription = STT.speechToText(context, elevenApiKey, File(filePath))
                     Log.d("AudioRecorder", "STT transcription: $transcription")
 
                     // Get chats data to provide context to LLM

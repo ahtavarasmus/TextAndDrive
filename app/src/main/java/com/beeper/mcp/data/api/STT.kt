@@ -14,11 +14,11 @@ import org.json.JSONObject
 import java.io.File
 
 /**
- * Minimal ElevenLabs STT helper using OkHttp.
+ * Minimal Tinfoil STT helper using OkHttp.
  * Usage:
- *   val text = ElevenLabsStt.speechToText(context, apiKey, audioFile)
+ * val text = TinfoilStt.speechToText(context, apiKey, audioFile)
  */
-object ElevenLabsStt {
+object STT {
     private val client = OkHttpClient.Builder()
         .addInterceptor(HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BASIC })
         .build()
@@ -27,28 +27,33 @@ object ElevenLabsStt {
         context: Context,
         apiKey: String,
         audioFile: File,
-        modelId: String = "whisper-large-v3-turbo"
+        model: String = "whisper-large-v3-turbo",
+        language: String? = null,
+        prompt: String? = null
     ): String = withContext(Dispatchers.IO) {
-        var url = "https://inference.tinfoil.sh/v1/audio/transcriptions"
+        val url = "https://inference.tinfoil.sh/v1/audio/transcriptions"
         val mediaType = "audio/mpeg".toMediaType()
-        val requestBody = MultipartBody.Builder()
+        val builder = MultipartBody.Builder()
             .setType(MultipartBody.FORM)
             .addFormDataPart("file", audioFile.name, audioFile.asRequestBody(mediaType))
-            .addFormDataPart("model_id", modelId)
-            .build()
-
+            .addFormDataPart("model", model)
+        if (language != null) {
+            builder.addFormDataPart("language", language)
+        }
+        if (prompt != null) {
+            builder.addFormDataPart("prompt", prompt)
+        }
+        val requestBody = builder.build()
         val request = Request.Builder()
             .url(url)
             // DO NOT log the actual API key. We add it to the request but will redact it in logs.
             .addHeader("Authorization", "Bearer $apiKey")
             .post(requestBody)
             .build()
-
         // Detailed logging: request metadata (redacting sensitive headers) and response body on failure
         try {
             client.newCall(request).execute().use { resp ->
                 val responseBodyString = resp.body?.string()
-
                 if (!resp.isSuccessful) {
                     // Try to extract helpful error details from JSON response if present
                     var errorDetails = responseBodyString ?: "(empty response body)"
@@ -69,26 +74,23 @@ object ElevenLabsStt {
                     } catch (je: Exception) {
                         // ignore JSON parse errors; keep raw body
                     }
-
-                    Log.e("ElevenLabsStt", "Request to $url failed: ${resp.code} ${resp.message}. Error: $errorDetails")
-                    Log.d("ElevenLabsStt", "Request info: url=${request.url}, method=${request.method}, fileName=${audioFile.name}, fileSize=${audioFile.length()} bytes")
-
-                    throw Exception("ElevenLabs STT failed: ${resp.code} ${resp.message}. Response body: $errorDetails")
+                    Log.e("TinfoilStt", "Request to $url failed: ${resp.code} ${resp.message}. Error: $errorDetails")
+                    Log.d("TinfoilStt", "Request info: url=${request.url}, method=${request.method}, fileName=${audioFile.name}, fileSize=${audioFile.length()} bytes")
+                    throw Exception("Tinfoil STT failed: ${resp.code} ${resp.message}. Response body: $errorDetails")
                 }
-
                 // Success path: return parsed text
-                val body = responseBodyString ?: throw Exception("Empty response body from ElevenLabs STT")
+                val body = responseBodyString ?: throw Exception("Empty response body from Tinfoil STT")
                 try {
                     val json = JSONObject(body)
                     json.optString("text", "")
                 } catch (je: Exception) {
                     // If response isn't JSON, return raw body but log warning
-                    Log.w("ElevenLabsStt", "Could not parse response JSON, returning raw body. Body=${body}")
+                    Log.w("TinfoilStt", "Could not parse response JSON, returning raw body. Body=${body}")
                     body
                 }
             }
         } catch (e: Exception) {
-            Log.e("ElevenLabsStt", "Network call to ElevenLabs failed: ${e.message}", e)
+            Log.e("TinfoilStt", "Network call to Tinfoil failed: ${e.message}", e)
             throw e
         }
     }
