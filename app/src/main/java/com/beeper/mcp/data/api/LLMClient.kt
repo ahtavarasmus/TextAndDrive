@@ -39,11 +39,26 @@ object LLMClient {
         fun buildMessages(userMsg: String, extra: List<JSONObject>? = null): JSONArray {
             val msgs = JSONArray()
             // Stronger system instruction: when a tool can be used, respond ONLY with a function_call
-            // object (name + JSON arguments). Do not emit assistant content when a tool is applicable.
+            // object (name + JSON arguments). Do NOT emit assistant text if a function_call is possible.
+            // Provide well-formed JSON arguments that match the tool parameter names. If no tool is
+            // applicable, respond with a plain assistant text answer only.
+            //
+            // Include an explicit example and strict rules so the model prefers function_call output:
+            // Example (when sending a message):
+            // {"function_call": {"name": "send_message", "arguments": {"room_id": "!abc:matrix.org", "text": "Hi"}}}
+            // Rules:
+            // 1) If any available tool can satisfy the user's request, output ONLY the function_call JSON
+            //    (no surrounding explanatory text). Use the `function_call` field at top-level.
+            // 2) Arguments must be valid JSON and include required fields from the tool signature.
+            // 3) If multiple tools could apply, pick the single best-matching tool. Do not output multiple
+            //    function_call objects.
+            // 4) If the required argument values are ambiguous or missing, populate them with the best
+            //    guess you can and prefer returning a function_call rather than asking follow-up questions.
+            // 5) Only use plain assistant text when no tool applies.
             msgs.put(
                 JSONObject().put("role", "system").put(
                     "content",
-                    "You are an assistant that has access to tools to send and fetch messages to different chat networks. When a tool can handle the user's request, respond ONLY with a function_call object (use the function_call field) specifying the tool name and JSON arguments. Do not include regular assistant text in that case. Only produce a text answer when no tool is applicable."
+                    "You are an assistant that has access to callable tools (functions). ALWAYS respond with a top-level JSON object containing only a single `function_call` when any tool can handle the user's request. The `function_call` value must be an object with `name` (the tool name) and `arguments` (a JSON object matching the tool's parameters). Example: {\\\"function_call\\\": {\\\"name\\\": \\\"send_message\\\", \\\"arguments\\\": {\\\"room_id\\\": \\\"!abc:matrix.org\\\", \\\"text\\\": \\\"Hi\\\"}}}. Do NOT include any additional assistant text when returning a function_call. Only produce plain assistant text when NO tool is applicable."
                 )
             )
             msgs.put(JSONObject().put("role", "user").put("content", userMsg))

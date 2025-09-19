@@ -26,6 +26,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.core.content.ContextCompat
 import com.beeper.mcp.data.api.ElevenLabsStt
 import com.beeper.mcp.data.api.ElevenLabsTts
+import com.beeper.mcp.tools.getChatsFormatted
 import kotlinx.coroutines.launch
 import java.io.File
 import java.io.IOException
@@ -69,6 +70,39 @@ fun AudioRecordScreen(modifier: Modifier = Modifier) {
                     val transcription = ElevenLabsStt.speechToText(context, elevenApiKey, File(filePath))
                     Log.d("AudioRecorder", "STT transcription: $transcription")
 
+                    // Call the normal getChatsFormatted function and log results
+                    try {
+                        Log.d("AudioRecorder", "Calling getChatsFormatted...")
+                        val startTime = System.currentTimeMillis()
+
+                        // Create args map with default parameters (you can modify these as needed)
+                        val args = mapOf<String, Any?>(
+                            "limit" to 10,
+                            "offset" to 0
+                            // Add other parameters as needed:
+                            // "isUnread" to 1,
+                            // "protocol" to "matrix",
+                            // etc.
+                        )
+
+                        val chatsResult = context.contentResolver.getChatsFormatted(args)
+                        val duration = System.currentTimeMillis() - startTime
+
+                        Log.d("AudioRecorder", "getChatsFormatted completed in ${duration}ms")
+                        Log.d("AudioRecorder", "Chats result length: ${chatsResult.length} characters")
+                        Log.d("AudioRecorder", "Chats result preview: ${chatsResult.take(500)}...")
+
+                        // Optionally log the full result (be careful with large outputs)
+                        if (chatsResult.length < 2000) {
+                            Log.d("AudioRecorder", "Full chats result:\n$chatsResult")
+                        }
+
+                    } catch (chatsEx: Exception) {
+                        Log.e("AudioRecorder", "getChatsFormatted failed: ${chatsEx.message}")
+                        Log.e("AudioRecorder", "getChatsFormatted exception type: ${chatsEx.javaClass.simpleName}")
+                        chatsEx.printStackTrace()
+                    }
+
                     // Convert the transcript to speech using ElevenLabsTts and play it back
                     // Send transcript to LLM with tools. TINFOIL_API_KEY must be present in BuildConfig
                     try {
@@ -87,16 +121,6 @@ fun AudioRecordScreen(modifier: Modifier = Modifier) {
                             .sendTranscriptWithTools(context, tinfoilKey, transcription, context.contentResolver)
 
                         Log.d("AudioRecorder", "Assistant reply: $assistantText")
-//
-//                        if (assistantText.isNotBlank()) {
-//                            try {
-//                                val voiceId = "5kMbtRSEKIkRZSdXxrZg"
-//                                val ttsFile = ElevenLabsTts.textToSpeech(context, elevenApiKey, voiceId, assistantText)
-//                                ElevenLabsTts.playFromFile(context, ttsFile)
-//                            } catch (ttsEx: Exception) {
-//                                Log.e("AudioRecorder", "TTS call/playback failed: ${ttsEx.message}")
-//                            }
-//                        }
 
                     } catch (ex: Exception) {
                         Log.e("AudioRecorder", "LLM tool flow failed: ${ex.message}")
