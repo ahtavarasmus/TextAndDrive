@@ -9,7 +9,10 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import androidx.compose.material3.*
+import android.util.Log
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -57,6 +60,23 @@ class MainActivity : ComponentActivity() {
                             onRequestPermissions = { requestBeeperPermissions() }
                         )
                     }
+                }
+            }
+        }
+        if (permissionsGranted) {
+            lifecycleScope.launch {
+                // Sample tool call for "get_chats" (mimics OpenAI response format)
+                val toolCall = mapOf(
+                    "name" to "get_chats",
+                    "arguments" to """{"limit":10}"""  // Fetches up to 10 most recent chats (read or unread)
+                )
+
+                try {
+                    val result = contentResolver.handleOpenAIToolCall(toolCall)
+                    Log.d("ToolTest", "Get Chats Result:\n$result")  // Inspect this in Logcat
+                    // Optional: Toast.makeText(this@MainActivity, result.take(200), Toast.LENGTH_LONG).show()  // Show snippet on screen
+                } catch (e: Exception) {
+                    Log.e("ToolTest", "Error: ${e.message}", e)
                 }
             }
         }
