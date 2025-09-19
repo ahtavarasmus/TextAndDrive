@@ -14,6 +14,7 @@ import com.beeper.mcp.tools.getChatsFormatted
 import com.beeper.mcp.tools.getContactsFormatted
 import com.beeper.mcp.tools.getMessagesFormatted
 import com.beeper.mcp.tools.sendMessageFormatted
+import com.beeper.mcp.tools.getChatsFormattedMock  // Add this import for the mock version
 import kotlinx.coroutines.withContext
 
 // Extension to convert JSONObject to Map<String, Any?>
@@ -132,7 +133,7 @@ fun getOpenAITools(): List<Map<String, Any>> {
     )
 }
 
-// Suspend function to handle an OpenAI tool call (call this when OpenAI responds with a tool_call)
+// Original suspend function to handle an OpenAI tool call (call this when OpenAI responds with a tool_call)
 suspend fun ContentResolver.handleOpenAIToolCall(toolCall: Map<String, Any>): String = withContext(Dispatchers.IO) {
     val functionName = toolCall["name"] as? String ?: return@withContext "Error: Invalid tool name"
     val argsJson = toolCall["arguments"] as? String ?: return@withContext "Error: Invalid arguments"
@@ -141,6 +142,23 @@ suspend fun ContentResolver.handleOpenAIToolCall(toolCall: Map<String, Any>): St
 
     when (functionName) {
         "get_chats" -> getChatsFormatted(argsMap)
+        "get_contacts" -> getContactsFormatted(argsMap)
+        "get_messages" -> getMessagesFormatted(argsMap)
+        "send_message" -> sendMessageFormatted(argsMap)
+        else -> "Error: Unknown tool $functionName"
+    }
+}
+
+// Duplicate suspend function for mocking - switches easily by renaming or calling this instead.
+// For "get_chats", it uses the mock version with hard-coded data; others remain actual.
+suspend fun ContentResolver.handleOpenAIToolCallMock(toolCall: Map<String, Any>): String = withContext(Dispatchers.IO) {
+    val functionName = toolCall["name"] as? String ?: return@withContext "Error: Invalid tool name"
+    val argsJson = toolCall["arguments"] as? String ?: return@withContext "Error: Invalid arguments"
+    val argsObj = JSONObject(argsJson)
+    val argsMap = argsObj.toMap()
+
+    when (functionName) {
+        "get_chats" -> getChatsFormattedMock(argsMap)  // Use mock with hard-coded example data
         "get_contacts" -> getContactsFormatted(argsMap)
         "get_messages" -> getMessagesFormatted(argsMap)
         "send_message" -> sendMessageFormatted(argsMap)

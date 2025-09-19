@@ -72,7 +72,7 @@ class MainActivity : ComponentActivity() {
                 )
 
                 try {
-                    val result = contentResolver.handleOpenAIToolCall(toolCall)
+                    val result = contentResolver.handleOpenAIToolCallMock(toolCall)
                     Log.d("ToolTest", "Get Chats Result:\n$result")  // Inspect this in Logcat
                     // Optional: Toast.makeText(this@MainActivity, result.take(200), Toast.LENGTH_LONG).show()  // Show snippet on screen
                 } catch (e: Exception) {
