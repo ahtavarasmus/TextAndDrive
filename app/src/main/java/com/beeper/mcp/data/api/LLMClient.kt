@@ -33,47 +33,8 @@ object LLMClient {
         val model = "qwen3-coder-480b" // adjust if needed
         val endpoint = "https://inference.tinfoil.sh/v1/chat/completions"
 
-        val functionsJson = JSONArray()
-        try {
-            val tools = com.beeper.mcp.getOpenAITools()
-            // The project's getOpenAITools() may return Maps, JSONObjects, or nested structures.
-            // Normalize each tool into the function definition object and add to functionsJson.
-            tools.forEach { toolItem ->
-                try {
-                    when (toolItem) {
-                        is Map<*, *> -> {
-                            val inner = toolItem["function"]
-                            if (inner is Map<*, *>) {
-                                functionsJson.put(JSONObject(inner))
-                            } else if (inner is JSONObject) {
-                                functionsJson.put(inner)
-                            } else {
-                                // If there's no inner function object, try the map itself
-                                functionsJson.put(JSONObject(toolItem))
-                            }
-                        }
-                        is JSONObject -> {
-                            val inner = if (toolItem.has("function")) toolItem.opt("function") else null
-                            if (inner is JSONObject) functionsJson.put(inner) else functionsJson.put(toolItem)
-                        }
-                        else -> {
-                            // Fallback: try to coerce to JSONObject from toString()
-                            try { functionsJson.put(JSONObject(toolItem.toString())) } catch (_: Exception) { }
-                        }
-                    }
-                } catch (e: Exception) {
-                    try { functionsJson.put(JSONObject(toolItem.toString())) } catch (_: Exception) { }
-                }
-            }
-        } catch (e: Exception) {
-            Log.d("LLMClient", "Failed to build functions list: ${e.message}")
-        }
+        val tools = com.beeper.mcp.getOpenAITools()
 
-        if (functionsJson.length() > 0) {
-            Log.d("LLMClient", "Attaching ${functionsJson.length()} function(s) to the LLM request: ${functionsJson}")
-        } else {
-            Log.d("LLMClient", "No functions attached to LLM request")
-        }
 
         fun buildMessages(userMsg: String, extra: List<JSONObject>? = null): JSONArray {
             val msgs = JSONArray()
@@ -90,18 +51,13 @@ object LLMClient {
             return msgs
         }
 
-        suspend fun callLLM(messages: JSONArray): JSONObject {
+        suspend fun callLLM(messages: JSONArray, tools: List<Map<String, Any>>): JSONObject {
             val payload = JSONObject()
                 .put("model", model)
                 .put("messages", messages)
-                .put("temperature", 0.2)
+                .put("tools", JSONArray(tools))
+                .put("temperature", 0.0)
 
-            if (functionsJson.length() > 0) {
-                payload.put("functions", functionsJson)
-                // Ask the model to prefer function calls. This biases the model to return a
-                // function_call object rather than free-form assistant content when a tool matches.
-                payload.put("function_call", "auto")
-            }
 
             val mediaType = "application/json; charset=utf-8".toMediaType()
             val body = payload.toString().toRequestBody(mediaType)
@@ -123,7 +79,7 @@ object LLMClient {
         }
 
         val initialMessages = buildMessages(transcript)
-        val initialResp = callLLM(initialMessages)
+        val initialResp = callLLM(initialMessages, tools)
         val choice = initialResp.getJSONArray("choices").getJSONObject(0)
         val message = choice.getJSONObject("message")
 
