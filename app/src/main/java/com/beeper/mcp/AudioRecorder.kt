@@ -61,7 +61,7 @@ fun AudioRecordScreen(modifier: Modifier = Modifier) {
     }
     // Function to call after recording (empty for now, add API later)
     fun processRecordedAudio(filePath: String) {
-        val elevenApiKey = BuildConfig.ELEVENLABS_API_KEY
+        val elevenApiKey = BuildConfig.TINFOIL_API_KEY
         Log.d("AudioRecorder", "ELEVENLABS_API_KEY: ${if (elevenApiKey.isNullOrBlank()) "<missing>" else "<redacted>"}") // avoid logging key
         // Removed user-facing toast for recorded file path to avoid alert after recording
         if (context is ComponentActivity) {
