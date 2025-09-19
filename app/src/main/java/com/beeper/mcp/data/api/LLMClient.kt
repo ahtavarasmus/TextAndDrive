@@ -19,6 +19,44 @@ object LLMClient {
         .callTimeout(60, TimeUnit.SECONDS)
         .build()
 
+    // Mutable, in-memory message history used to provide conversational context to the LLM.
+    // We keep the last 5 back-and-forth exchanges maximum. Each exchange is two messages
+    // (user + assistant), so we retain up to 10 role messages.
+    private val maxBackAndForth = 5
+    private val maxMessages = maxBackAndForth * 2
+    private val messageHistory: ArrayDeque<org.json.JSONObject> = ArrayDeque()
+
+    // Add a user message to the rolling history
+    fun addUserMessage(content: String) {
+        synchronized(messageHistory) {
+            messageHistory.addLast(org.json.JSONObject().put("role", "user").put("content", content))
+            trimHistoryIfNeeded()
+        }
+    }
+
+    // Add an assistant message to the rolling history
+    fun addAssistantMessage(content: String) {
+        synchronized(messageHistory) {
+            messageHistory.addLast(org.json.JSONObject().put("role", "assistant").put("content", content))
+            trimHistoryIfNeeded()
+        }
+    }
+
+    // Return a copy of history as a JSONArray (oldest -> newest)
+    fun getHistoryAsJsonArray(): org.json.JSONArray {
+        val arr = org.json.JSONArray()
+        synchronized(messageHistory) {
+            messageHistory.forEach { arr.put(it) }
+        }
+        return arr
+    }
+
+    private fun trimHistoryIfNeeded() {
+        while (messageHistory.size > maxMessages) {
+            messageHistory.removeFirst()
+        }
+    }
+
     /**
      * Sends the transcript to a generic LLM inference endpoint supporting chat/completions
      * with function definitions. Uses the project's tools and ContentResolver handler for
@@ -58,9 +96,42 @@ object LLMClient {
             msgs.put(
                 JSONObject().put("role", "system").put(
                     "content",
-                    "You are a helpful assistant. When the user's request can be fulfilled using available functions, call the appropriate function(s). Always respond directly to function calls without additional explanation unless specifically asked."
+                    "You are a helpful assistant that uses functions to act. DO NOT CALL get_contacts tool ever. Follow these rules in order:\n" +
+                            "1) If the user's request explicitly includes a recipient name and the message text, call send_message. Do not call get_contacts first.\n" +
+                            "2) If the user's request names a recipient but you cannot be sure which contact is intended, call get_contacts with {\"query\":\"<recipient name>\"} to resolve. If get_contacts returns a single match, call send_message with that match's room_id. If get_contacts returns multiple matches, ask the user a clarifying question.\n" +
+                            "3) Use get_chats only when the user asked to list or search chats or messages, not for direct sending.\n" +
+                            "4) Always return only the function call payload required by the API.\n" +
+                            "Example 1:\n" +
+                            "User: \"Send a message to Rasmus: I'll be five minutes late.\"\n" +
+                            "Assistant should call function send_message with arguments {\"room_id\":\"<resolved id>\", \"text\":\"I'll be five minutes late.\"}\n" +
+                            "Example 2:\n" +
+                            "User: \"Find messages from Rasmus last week\"\n" +
+                            "Assistant should call get_messages.\n"
                 )
             )
+            // Inject recent conversation history so the model has the last N exchanges for context.
+            // We include history (oldest -> newest) but avoid duplicating the current user message
+            // if it was already appended to the history by the caller.
+            try {
+                val history = getHistoryAsJsonArray()
+                if (history.length() > 0) {
+                    var skipLastUser = false
+                    try {
+                        val lastIdx = history.length() - 1
+                        val lastObj = history.getJSONObject(lastIdx)
+                        if (lastObj.optString("role", "") == "user" && lastObj.optString("content", "") == userMsg) {
+                            skipLastUser = true
+                        }
+                    } catch (_: Exception) {
+                    }
+
+                    for (i in 0 until history.length()) {
+                        if (skipLastUser && i == history.length() - 1) continue
+                        msgs.put(history.getJSONObject(i))
+                    }
+                }
+            } catch (_: Exception) {
+            }
             msgs.put(JSONObject().put("role", "user").put("content", userMsg))
             extra?.forEach { msgs.put(it) }
             return msgs

@@ -123,6 +123,13 @@ fun AudioRecordScreen(modifier: Modifier = Modifier) {
                         }
 
                         Log.d("AudioRecorder", "Sending enhanced transcript with chats context to LLM")
+                        // Record user message into the LLM client's rolling history so the model
+                        // can use the previous back-and-forth context (up to 5 exchanges).
+                        try {
+                            com.beeper.mcp.data.api.LLMClient.addUserMessage(enhancedTranscript)
+                        } catch (_: Exception) {
+                        }
+
                         var assistantText = com.beeper.mcp.data.api.LLMClient
                             .sendTranscriptWithTools(context, tinfoilKey, enhancedTranscript, context.contentResolver)
 
@@ -135,6 +142,12 @@ fun AudioRecordScreen(modifier: Modifier = Modifier) {
                         }
 
                         Log.d("AudioRecorder", "Assistant reply: $assistantText")
+
+                        // Save assistant response back into the LLM client's rolling history
+                        try {
+                            if (!assistantText.isNullOrBlank()) com.beeper.mcp.data.api.LLMClient.addAssistantMessage(assistantText)
+                        } catch (_: Exception) {
+                        }
 
                         // Track whether we've already played a TTS message so we don't duplicate playback
                         var playedTts = false
@@ -222,6 +235,13 @@ fun AudioRecordScreen(modifier: Modifier = Modifier) {
                                 }
 
 
+                                // Record the TTS prompt as a user message so the LLM has the preceding
+                                // context when generating the spoken confirmation.
+                                try {
+                                    com.beeper.mcp.data.api.LLMClient.addUserMessage(ttsPrompt)
+                                } catch (_: Exception) {
+                                }
+
                                 var ttsMessage = com.beeper.mcp.data.api.LLMClient
                                     .sendTranscriptWithTools(context, tinfoilKey, ttsPrompt, context.contentResolver)
 
@@ -242,6 +262,12 @@ fun AudioRecordScreen(modifier: Modifier = Modifier) {
                                         if (!candidate.isNullOrBlank()) {
                                             ttsMessage = candidate
                                         }
+
+                                    // Save the assistant's TTS-generation reply into history as well
+                                    try {
+                                        if (!ttsMessage.isNullOrBlank()) com.beeper.mcp.data.api.LLMClient.addAssistantMessage(ttsMessage)
+                                    } catch (_: Exception) {
+                                    }
                                     } catch (_: Exception) {
                                         // ignore parse errors and fall back to raw text
                                     }
