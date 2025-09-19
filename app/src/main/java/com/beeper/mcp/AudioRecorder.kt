@@ -29,6 +29,7 @@ import com.beeper.mcp.data.api.ElevenLabsTts
 import kotlinx.coroutines.launch
 import java.io.File
 import java.io.IOException
+import java.security.MessageDigest
 
 class AudioRecorderActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -59,22 +60,46 @@ fun AudioRecordScreen(modifier: Modifier = Modifier) {
     }
     // Function to call after recording (empty for now, add API later)
     fun processRecordedAudio(filePath: String) {
-        val apiKey = BuildConfig.ELEVENLABS_API_KEY
-        Log.d("AudioRecorder", "ELEVENLABS_API_KEY: $apiKey") // DEBUG: Log the API key
+        val elevenApiKey = BuildConfig.ELEVENLABS_API_KEY
+        Log.d("AudioRecorder", "ELEVENLABS_API_KEY: ${if (elevenApiKey.isNullOrBlank()) "<missing>" else "<redacted>"}") // avoid logging key
         // Removed user-facing toast for recorded file path to avoid alert after recording
         if (context is ComponentActivity) {
             context.lifecycleScope.launch {
                 try {
-                    val transcription = ElevenLabsStt.speechToText(context, apiKey, File(filePath))
+                    val transcription = ElevenLabsStt.speechToText(context, elevenApiKey, File(filePath))
                     Log.d("AudioRecorder", "STT transcription: $transcription")
 
                     // Convert the transcript to speech using ElevenLabsTts and play it back
+                    // Send transcript to LLM with tools. TINFOIL_API_KEY must be present in BuildConfig
                     try {
-                        val voiceId = "5kMbtRSEKIkRZSdXxrZg"
-                        val ttsFile = ElevenLabsTts.textToSpeech(context, apiKey, voiceId, transcription)
-                        ElevenLabsTts.playFromFile(context, ttsFile)
-                    } catch (ttsEx: Exception) {
-                        Log.e("AudioRecorder", "TTS call/playback failed: ${ttsEx.message}")
+                        val tinfoilKey = try { BuildConfig.TINFOIL_API_KEY } catch (_: Exception) { "" }
+                        // Safer debug output: do NOT log the full API key. Log presence, length, a masked snippet, and a SHA-256 fingerprint.
+                        if (tinfoilKey.isNullOrBlank()) {
+                            Log.w("AudioRecorder", "TINFOIL_API_KEY is missing or blank")
+                        } else {
+                            val masked = if (tinfoilKey.length > 8) "${tinfoilKey.substring(0,4)}...${tinfoilKey.takeLast(4)}" else "****"
+                            val sha256 = try {
+                                MessageDigest.getInstance("SHA-256").digest(tinfoilKey.toByteArray()).joinToString("") { "%02x".format(it) }
+                            } catch (e: Exception) { "<hash-error>" }
+                            Log.d("AudioRecorder", "TINFOIL_API_KEY present: length=${tinfoilKey.length}, masked=$masked, sha256=$sha256")
+                        }
+                        val assistantText = com.beeper.mcp.data.api.LLMClient
+                            .sendTranscriptWithTools(context, tinfoilKey, transcription, context.contentResolver)
+
+                        Log.d("AudioRecorder", "Assistant reply: $assistantText")
+//
+//                        if (assistantText.isNotBlank()) {
+//                            try {
+//                                val voiceId = "5kMbtRSEKIkRZSdXxrZg"
+//                                val ttsFile = ElevenLabsTts.textToSpeech(context, elevenApiKey, voiceId, assistantText)
+//                                ElevenLabsTts.playFromFile(context, ttsFile)
+//                            } catch (ttsEx: Exception) {
+//                                Log.e("AudioRecorder", "TTS call/playback failed: ${ttsEx.message}")
+//                            }
+//                        }
+
+                    } catch (ex: Exception) {
+                        Log.e("AudioRecorder", "LLM tool flow failed: ${ex.message}")
                     }
 
                 } catch (e: Exception) {
