@@ -62,3 +62,12 @@ fun ContentResolver.sendMessageFormatted(args: Map<String, Any?>): String {
         "Error sending message: ${e.message}"
     }
 }
+
+// Helper that hardcodes the room and message and sends it using sendMessageFormatted
+fun ContentResolver.sendHardcodedMessageToRasums(): String {
+    val args = mapOf<String, Any?>(
+        "room_id" to "!cbCjiIrE5DAMrQ2jwePN:beeper.local",
+        "text" to "I'll be 10 minutes late"
+    )
+    return sendMessageFormatted(args)
+}

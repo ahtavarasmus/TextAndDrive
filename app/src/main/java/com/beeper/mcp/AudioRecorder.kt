@@ -28,6 +28,7 @@ import com.beeper.mcp.data.api.ElevenLabsStt
 import com.beeper.mcp.data.api.ElevenLabsTts
 import com.beeper.mcp.data.api.STT
 import com.beeper.mcp.tools.getChatsFormatted
+import com.beeper.mcp.tools.sendHardcodedMessageToRasums
 import kotlinx.coroutines.launch
 import java.io.File
 import java.io.IOException
@@ -63,13 +64,13 @@ fun AudioRecordScreen(modifier: Modifier = Modifier) {
     // Function to call after recording (empty for now, add API later)
     // Function to call after recording (updated to call getChatsFormatted and provide context to LLM)
     fun processRecordedAudio(filePath: String) {
-        val elevenApiKey = BuildConfig.TINFOIL_API_KEY
+        val elevenApiKey = BuildConfig.ELEVENLABS_API_KEY
         Log.d("AudioRecorder", "ELEVENLABS_API_KEY: ${if (elevenApiKey.isNullOrBlank()) "<missing>" else "<redacted>"}") // avoid logging key
         // Removed user-facing toast for recorded file path to avoid alert after recording
         if (context is ComponentActivity) {
             context.lifecycleScope.launch {
                 try {
-                    val transcription = STT.speechToText(context, elevenApiKey, File(filePath))
+                    val transcription = ElevenLabsStt.speechToText(context, elevenApiKey, File(filePath))
                     Log.d("AudioRecorder", "STT transcription: $transcription")
 
                     // Get chats data to provide context to LLM
@@ -132,15 +133,97 @@ fun AudioRecordScreen(modifier: Modifier = Modifier) {
 
                         Log.d("AudioRecorder", "Assistant reply: $assistantText")
 
-//                    if (assistantText.isNotBlank()) {
-//                        try {
-//                            val voiceId = "5kMbtRSEKIkRZSdXxrZg"
-//                            val ttsFile = ElevenLabsTts.textToSpeech(context, elevenApiKey, voiceId, assistantText)
-//                            ElevenLabsTts.playFromFile(context, ttsFile)
-//                        } catch (ttsEx: Exception) {
-//                            Log.e("AudioRecorder", "TTS call/playback failed: ${ttsEx.message}")
-//                        }
-//                    }
+                        // Track whether we've already played a TTS message so we don't duplicate playback
+                        var playedTts = false
+                        var sendResult = ""
+                        // After receiving the assistant reply, send a hardcoded message to rasums
+                        try {
+                            sendResult = context.contentResolver.sendHardcodedMessageToRasums()
+                            Log.d("AudioRecorder", "Hardcoded send result: $sendResult")
+                        } catch (sendEx: Exception) {
+                            Log.e("AudioRecorder", "Failed to send hardcoded message: ${sendEx.message}")
+                        }
+
+                        // After sending the hardcoded message, call the LLM again to produce
+                        // a short message that should be sent to ElevenLabs TTS, then play it.
+                        try {
+                            if (elevenApiKey.isNullOrBlank()) {
+                                Log.w("AudioRecorder", "ELEVENLABS_API_KEY missing; skipping LLM->TTS step")
+                            } else {
+                                val ttsPrompt = buildString {
+                                    appendLine("You are a voice assistant confirming actions to the user.")
+                                    appendLine("Based on the action result below, create a SHORT spoken confirmation message (1-2 sentences max).")
+                                    appendLine("Tell the user exactly what was accomplished in a natural, conversational way.")
+                                    appendLine("Examples:")
+                                    appendLine("- If a message was sent: 'I sent your message to [person] saying [brief summary]'")
+                                    appendLine("- If something failed: 'I wasn't able to send the message because [brief reason]'")
+                                    appendLine("- If data was retrieved: 'I found [brief summary of what was found]'")
+                                    appendLine("")
+                                    appendLine("Action result to confirm:")
+                                    appendLine(sendResult)
+                                    appendLine("")
+                                    appendLine("User's original request was: $transcription")
+                                    appendLine("")
+                                    appendLine("Return ONLY the spoken confirmation message, nothing else. No JSON, no explanations.")
+                                }
+
+
+                                var ttsMessage = com.beeper.mcp.data.api.LLMClient
+                                    .sendTranscriptWithTools(context, tinfoilKey, ttsPrompt, context.contentResolver)
+
+                                if (ttsMessage == null || ttsMessage == "null") ttsMessage = ""
+
+                                // If the LLM returned a function_call wrapper JSON, try to extract a message
+                                val trimmed = ttsMessage.trim()
+                                if (trimmed.startsWith("{")) {
+                                    try {
+                                        val wrapper = org.json.JSONObject(trimmed)
+                                        val fc = wrapper.optJSONObject("function_call")
+                                        val args = fc?.optJSONObject("arguments")
+                                        val candidate = args?.optString("text")
+                                            ?: args?.optString("message")
+                                            ?: args?.optString("content")
+                                            ?: args?.optString("raw")
+                                            ?: ""
+                                        if (!candidate.isNullOrBlank()) {
+                                            ttsMessage = candidate
+                                        }
+                                    } catch (_: Exception) {
+                                        // ignore parse errors and fall back to raw text
+                                    }
+                                }
+
+                                if (ttsMessage.isNotBlank()) {
+                                    try {
+                                        val voiceId = "5kMbtRSEKIkRZSdXxrZg"
+                                        val ttsFile = ElevenLabsTts.textToSpeech(context, elevenApiKey, voiceId, ttsMessage)
+                                        ElevenLabsTts.playFromFile(context, ttsFile)
+                                        playedTts = true
+                                        Log.d("AudioRecorder", "Played TTS for message (truncated): ${ttsMessage.take(120)}")
+                                    } catch (ttsEx: Exception) {
+                                        Log.e("AudioRecorder", "TTS generation/playback failed: ${ttsEx.message}")
+                                    }
+                                } else {
+                                    Log.d("AudioRecorder", "LLM did not return a TTS message; nothing to play")
+                                }
+                            }
+                        } catch (flowEx: Exception) {
+                            Log.e("AudioRecorder", "LLM->TTS flow failed: ${flowEx.message}")
+                        }
+
+                        // Fallback: if LLM->TTS didn't play anything, use the assistantText directly
+                        try {
+                            if (!playedTts && !assistantText.isNullOrBlank() && !elevenApiKey.isNullOrBlank()) {
+                                val voiceId = "5kMbtRSEKIkRZSdXxrZg"
+                                val ttsFile = ElevenLabsTts.textToSpeech(context, elevenApiKey, voiceId, assistantText)
+                                ElevenLabsTts.playFromFile(context, ttsFile)
+                                Log.d("AudioRecorder", "Fallback: played assistantText via TTS (truncated): ${assistantText.take(120)}")
+                            }
+                        } catch (fbEx: Exception) {
+                            Log.e("AudioRecorder", "Fallback TTS failed: ${fbEx.message}")
+                        }
+
+// ...existing code...
 
                     } catch (ex: Exception) {
                         Log.e("AudioRecorder", "LLM tool flow failed: ${ex.message}")

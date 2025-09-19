@@ -27,9 +27,9 @@ object ElevenLabsStt {
         context: Context,
         apiKey: String,
         audioFile: File,
-        modelId: String = "whisper-large-v3-turbo"
+        modelId: String = "scribe_v1"
     ): String = withContext(Dispatchers.IO) {
-        var url = "https://inference.tinfoil.sh/v1/audio/transcriptions"
+        val url = "https://api.elevenlabs.io/v1/speech-to-text"
         val mediaType = "audio/mpeg".toMediaType()
         val requestBody = MultipartBody.Builder()
             .setType(MultipartBody.FORM)
@@ -40,7 +40,7 @@ object ElevenLabsStt {
         val request = Request.Builder()
             .url(url)
             // DO NOT log the actual API key. We add it to the request but will redact it in logs.
-            .addHeader("Authorization", "Bearer $apiKey")
+            .addHeader("xi-api-key", apiKey)
             .post(requestBody)
             .build()
 
