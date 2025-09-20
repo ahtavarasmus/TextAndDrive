@@ -15,6 +15,8 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -48,8 +50,13 @@ class AudioRecorderActivity : ComponentActivity() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AudioRecordScreen(modifier: Modifier = Modifier) {
+fun AudioRecordScreen(
+    modifier: Modifier = Modifier,
+    isDemo: Boolean = false,
+    onBack: (() -> Unit)? = null
+) {
     val context = LocalContext.current
     var isRecording by remember { mutableStateOf(false) }
     var recordingJob: Job? by remember { mutableStateOf(null) }
@@ -65,6 +72,7 @@ fun AudioRecordScreen(modifier: Modifier = Modifier) {
                     val transcription = STT.speechToText(ApiKey, File(filePath))
                     Log.d("AudioRecorder", "STT transcription: $transcription")
                     // ... (rest of the code remains the same: call getChatsFormatted, LLM, etc.)
+                    var chatsResult = ""
                     try {
                         Log.d("AudioRecorder", "Calling getChatsFormatted for LLM context...")
                         val startTime = System.currentTimeMillis()
@@ -74,7 +82,11 @@ fun AudioRecordScreen(modifier: Modifier = Modifier) {
                             "limit" to 35, // Get more chats for better context
                             "offset" to 0
                         )
-                        val chatsResult = context.contentResolver.getChatsFormatted(args)
+                        chatsResult = if (isDemo) {
+                            "Mock chats:\nChat1: Friend: Hello\nYou: Hi\nChat2: Group: Meeting at 5"
+                        } else {
+                            context.contentResolver.getChatsFormatted(args)
+                        }
                         val duration = System.currentTimeMillis() - startTime
                         Log.d("AudioRecorder", "getChatsFormatted completed in ${duration}ms")
                         Log.d("AudioRecorder", "Chats result length: ${chatsResult.length} characters")
@@ -84,6 +96,13 @@ fun AudioRecordScreen(modifier: Modifier = Modifier) {
                         }
                     } catch (chatsEx: Exception) {
                         Log.e("AudioRecorder", "getChatsFormatted failed: ${chatsEx.message}")
+                    }
+                    // Create enhanced transcript with chats context
+                    val enhancedTranscript = buildString {
+                        appendLine("User transcript: $transcription")
+                        appendLine()
+                        appendLine("Available chats context:")
+                        appendLine(chatsResult)  // Include the actual fetched chats
                     }
 
                     // Send transcript to LLM with tools and chats context
@@ -162,7 +181,11 @@ fun AudioRecordScreen(modifier: Modifier = Modifier) {
                                         )
 
                                         // Execute the tool call using the ContentResolver helper.
-                                        sendResult = context.contentResolver.handleOpenAIToolCall(toolCallMap)
+                                        sendResult = if (isDemo) {
+                                            "Mock tool call executed: $fname with args $argsJsonString"
+                                        } else {
+                                            context.contentResolver.handleOpenAIToolCall(toolCallMap)
+                                        }
                                         Log.d("AudioRecorder", "Executed tool call: $fname -> result length=${sendResult.length}")
                                     } else {
                                         // Not a function_call JSON; use assistant text directly
@@ -173,7 +196,11 @@ fun AudioRecordScreen(modifier: Modifier = Modifier) {
                                     Log.e("AudioRecorder", "Failed to parse assistant JSON reply: ${parseEx.message}")
                                     // As a cautious fallback, attempt the legacy hardcoded send
                                     try {
-                                        sendResult = context.contentResolver.sendHardcodedMessageToRasums()
+                                        sendResult = if (isDemo) {
+                                            "Mock hardcoded message sent"
+                                        } else {
+                                            context.contentResolver.sendHardcodedMessageToRasums()
+                                        }
                                         Log.d("AudioRecorder", "Fallback hardcoded send result: $sendResult")
                                     } catch (sendEx: Exception) {
                                         Log.e("AudioRecorder", "Fallback hardcoded send failed: ${sendEx.message}")
@@ -246,11 +273,11 @@ fun AudioRecordScreen(modifier: Modifier = Modifier) {
                                             ttsMessage = candidate
                                         }
 
-                                    // Save the assistant's TTS-generation reply into history as well
-                                    try {
-                                        if (!ttsMessage.isNullOrBlank()) com.beeper.mcp.data.api.LLMClient.addAssistantMessage(ttsMessage)
-                                    } catch (_: Exception) {
-                                    }
+                                        // Save the assistant's TTS-generation reply into history as well
+                                        try {
+                                            if (!ttsMessage.isNullOrBlank()) com.beeper.mcp.data.api.LLMClient.addAssistantMessage(ttsMessage)
+                                        } catch (_: Exception) {
+                                        }
                                     } catch (_: Exception) {
                                         // ignore parse errors and fall back to raw text
                                     }
@@ -298,7 +325,7 @@ fun AudioRecordScreen(modifier: Modifier = Modifier) {
                                     Log.d("AudioRecorder", "Fallback: played text via TTS (truncated): ${candidate.take(120)}")
                                     playedTts = true
                                 } else {
-                                    Log.w("AudioRecorder", "No suitable human-readable text to TTS; skipping fallback to avoid speaking raw JSON")
+                                    Log.w("AudioRecorder", "No suitable human-readable text to TTS; skipping fallback to avoid vague outputs")
                                 }
                             }
                         } catch (fbEx: Exception) {
@@ -321,6 +348,16 @@ fun AudioRecordScreen(modifier: Modifier = Modifier) {
         color = MaterialTheme.colorScheme.background
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
+            if (onBack != null) {
+                TopAppBar(
+                    title = { Text(if (isDemo) "Demo Mode" else "Real Mode") },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                        }
+                    }
+                )
+            }
             Box(
                 modifier = Modifier
                     .fillMaxSize()

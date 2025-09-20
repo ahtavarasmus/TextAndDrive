@@ -1,5 +1,4 @@
 package com.beeper.mcp
-
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
@@ -25,9 +24,7 @@ import androidx.core.content.ContextCompat
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.background
 import com.beeper.mcp.ui.theme.BeeperMcpTheme
-
 const val BEEPER_AUTHORITY = "com.beeper.api"
-
 // Modern Color Palette inspired by Claude
 object ModernColors {
     val Primary = Color(0xFFE97C4C) // Warm orange-red (Claude inspired)
@@ -42,13 +39,11 @@ object ModernColors {
     val Error = Color(0xFFEF4444) // Modern red
     val Warning = Color(0xFFF59E0B) // Modern amber
 }
-
 class MainActivity : ComponentActivity() {
     private var permissionsGranted by mutableStateOf(false)
     private var micPermissionGranted by mutableStateOf(false)
     // Tracks whether the user chose the demo flow or the real flow (or still choosing)
     private var appMode by mutableStateOf("choice") // values: "choice", "demo", "real"
-
     private val beeperPermissions = mutableListOf(
         "com.beeper.android.permission.READ_PERMISSION",
         "com.beeper.android.permission.SEND_PERMISSION"
@@ -57,25 +52,24 @@ class MainActivity : ComponentActivity() {
             add(Manifest.permission.POST_NOTIFICATIONS)
         }
     }.toTypedArray()
-
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
         permissionsGranted = permissions.values.all { it }
     }
-
     // Microphone permission launcher
     private val micPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         micPermissionGranted = granted
     }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         checkBeeperPermissions()
-
+        if (permissionsGranted) {
+            appMode = "real"
+        }
         setContent {
             BeeperMcpTheme {
                 Surface(
@@ -91,15 +85,20 @@ class MainActivity : ComponentActivity() {
                                 onReal = { appMode = "real" }
                             )
                             "demo" -> {
-                                // Demo flow: require both Beeper and microphone permissions
-                                if (permissionsGranted && micPermissionGranted) {
-                                    DemoAudioRecordScreen(modifier = Modifier.padding(innerPadding))
+                                // Demo flow: require only microphone permissions
+                                if (micPermissionGranted) {
+                                    AudioRecordScreen(
+                                        modifier = Modifier.padding(innerPadding),
+                                        isDemo = true,
+                                        onBack = { appMode = "choice" }
+                                    )
                                 } else {
                                     PermissionStatus(
                                         permissionsGranted = permissionsGranted,
                                         micPermissionGranted = micPermissionGranted,
+                                        requireBeeper = false,
                                         modifier = Modifier.padding(innerPadding),
-                                        onRequestPermissions = { requestBeeperPermissions() },
+                                        onRequestPermissions = { },
                                         onRequestMic = { micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO) }
                                     )
                                 }
@@ -107,11 +106,16 @@ class MainActivity : ComponentActivity() {
                             "real" -> {
                                 // Real flow: require both Beeper and microphone permissions
                                 if (permissionsGranted && micPermissionGranted) {
-                                    AudioRecordScreen(modifier = Modifier.padding(innerPadding))
+                                    AudioRecordScreen(
+                                        modifier = Modifier.padding(innerPadding),
+                                        isDemo = false,
+                                        onBack = { appMode = "choice" }
+                                    )
                                 } else {
                                     PermissionStatus(
                                         permissionsGranted = permissionsGranted,
                                         micPermissionGranted = micPermissionGranted,
+                                        requireBeeper = true,
                                         modifier = Modifier.padding(innerPadding),
                                         onRequestPermissions = { requestBeeperPermissions() },
                                         onRequestMic = { micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO) }
@@ -137,24 +141,21 @@ class MainActivity : ComponentActivity() {
                 // Sample tool call for "get_chats" (mimics OpenAI response format)
                 val toolCall = mapOf(
                     "name" to "get_chats",
-                    "arguments" to """{"limit":10}"""  // Fetches up to 10 most recent chats (read or unread)
+                    "arguments" to """{"limit":10}""" // Fetches up to 10 most recent chats (read or unread)
                 )
-
                 try {
                     val result = contentResolver.handleOpenAIToolCallMock(toolCall)
-                    Log.d("ToolTest", "Get Chats Result:\n$result")  // Inspect this in Logcat
+                    Log.d("ToolTest", "Get Chats Result:\n$result") // Inspect this in Logcat
                 } catch (e: Exception) {
                     Log.e("ToolTest", "Error: ${e.message}", e)
                 }
             }
         }
     }
-
     override fun onResume() {
         super.onResume()
         checkBeeperPermissions() // Re-check on resume
     }
-
     private fun checkBeeperPermissions() {
         permissionsGranted = beeperPermissions.all { permission ->
             ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
@@ -164,7 +165,6 @@ class MainActivity : ComponentActivity() {
             Manifest.permission.RECORD_AUDIO
         ) == PackageManager.PERMISSION_GRANTED
     }
-
     private fun requestBeeperPermissions() {
         val permissionsToRequest = beeperPermissions.filter { permission ->
             ContextCompat.checkSelfPermission(this, permission) != PackageManager.PERMISSION_GRANTED
@@ -178,7 +178,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 }
-
 @Composable
 fun ChoiceScreen(
     modifier: Modifier = Modifier,
@@ -203,7 +202,6 @@ fun ChoiceScreen(
             color = ModernColors.OnBackground,
             modifier = Modifier.padding(bottom = 16.dp)
         )
-
         Text(
             text = "Select how you'd like to experience the app",
             style = MaterialTheme.typography.bodyLarge.copy(
@@ -213,7 +211,6 @@ fun ChoiceScreen(
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(bottom = 48.dp)
         )
-
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -274,7 +271,6 @@ fun ChoiceScreen(
                 }
             }
         }
-
         Card(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(20.dp),
@@ -335,12 +331,12 @@ fun ChoiceScreen(
         }
     }
 }
-
 @Composable
 fun PermissionStatus(
     modifier: Modifier = Modifier,
     permissionsGranted: Boolean = false,
     micPermissionGranted: Boolean = false,
+    requireBeeper: Boolean = true,
     onRequestPermissions: () -> Unit = {},
     onRequestMic: () -> Unit = {}
 ) {
@@ -359,7 +355,6 @@ fun PermissionStatus(
             color = ModernColors.OnBackground,
             modifier = Modifier.padding(bottom = 8.dp)
         )
-
         Text(
             text = "In order for our app to work smoothly, we would need these permissions from you:",
             style = MaterialTheme.typography.bodyLarge.copy(
@@ -368,7 +363,6 @@ fun PermissionStatus(
             color = ModernColors.Secondary,
             modifier = Modifier.padding(bottom = 32.dp)
         )
-
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = ModernColors.Surface),
@@ -376,18 +370,18 @@ fun PermissionStatus(
             shape = RoundedCornerShape(20.dp)
         ) {
             Column(modifier = Modifier.padding(24.dp)) {
-                // Beeper Permissions Row
-                StatusRow(
-                    label = "Beeper permissions",
-                    status = if (permissionsGranted) "✅ Granted" else "❌ Not Granted",
-                    statusColor = if (permissionsGranted) ModernColors.Success else ModernColors.Error,
-                    buttonText = "Grant",
-                    showButton = !permissionsGranted,
-                    onButtonClick = onRequestPermissions
-                )
-
-                Spacer(modifier = Modifier.height(20.dp))
-
+                // Beeper Permissions Row (only if required)
+                if (requireBeeper) {
+                    StatusRow(
+                        label = "Beeper permissions",
+                        status = if (permissionsGranted) "✅ Granted" else "❌ Not Granted",
+                        statusColor = if (permissionsGranted) ModernColors.Success else ModernColors.Error,
+                        buttonText = "Grant",
+                        showButton = !permissionsGranted,
+                        onButtonClick = onRequestPermissions
+                    )
+                    Spacer(modifier = Modifier.height(20.dp))
+                }
                 // Microphone Permissions Row
                 StatusRow(
                     label = "Microphone",
@@ -399,37 +393,38 @@ fun PermissionStatus(
                 )
             }
         }
-        // Warning message
-        Spacer(modifier = Modifier.height(24.dp))
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = ModernColors.Warning.copy(alpha = 0.1f)
-            )
-        ) {
-            Row(
-                modifier = Modifier.padding(20.dp),
-                verticalAlignment = Alignment.CenterVertically
+        // Warning message (only if Beeper is required)
+        if (requireBeeper) {
+            Spacer(modifier = Modifier.height(24.dp))
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = ModernColors.Warning.copy(alpha = 0.1f)
+                )
             ) {
-                Text(
-                    text = "⚠️",
-                    style = MaterialTheme.typography.bodyLarge.copy(fontSize = 20.sp),
-                    modifier = Modifier.padding(end = 12.dp)
-                )
-                Text(
-                    text = "Ensure Beeper app is installed",
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        fontWeight = FontWeight.Medium,
-                        fontSize = 15.sp
-                    ),
-                    color = ModernColors.Warning
-                )
+                Row(
+                    modifier = Modifier.padding(20.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "⚠️",
+                        style = MaterialTheme.typography.bodyLarge.copy(fontSize = 20.sp),
+                        modifier = Modifier.padding(end = 12.dp)
+                    )
+                    Text(
+                        text = "Ensure Beeper app is installed",
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontWeight = FontWeight.Medium,
+                            fontSize = 15.sp
+                        ),
+                        color = ModernColors.Warning
+                    )
+                }
             }
         }
     }
 }
-
 @Composable
 fun StatusRow(
     label: String,
