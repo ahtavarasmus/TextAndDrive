@@ -234,7 +234,7 @@ fun ChoiceScreen(
                 containerColor = HitchhikerColors.Primary
             )
         ) {
-            Text("Try Demo: Chat with Marvin's Inbox (No Setup Needed)")
+            Text("Try Demo: Chat with Marvin's Inbox")
         }
         Button(
             onClick = onReal,
@@ -246,7 +246,7 @@ fun ChoiceScreen(
                 containerColor = HitchhikerColors.Primary.copy(alpha = 0.7f)
             )
         ) {
-            Text("Real Mode: Your Actual Chats (Needs Beeper, Poor Marvin)")
+            Text("Real Mode: Your Actual Chats")
         }
         OutlinedButton(
             onClick = onInterest,
