@@ -11,7 +11,6 @@ import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -55,21 +54,6 @@ fun AudioRecordScreen(modifier: Modifier = Modifier) {
     var isRecording by remember { mutableStateOf(false) }
     var recordingJob: Job? by remember { mutableStateOf(null) }
     var outputFile: File? by remember { mutableStateOf(null) }
-
-    // Permission launcher and local permission state
-    var micPermissionGranted by remember {
-        mutableStateOf(
-            ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
-        )
-    }
-    val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        micPermissionGranted = isGranted
-        if (!isGranted) {
-            Toast.makeText(context, "Audio permission denied", Toast.LENGTH_SHORT).show()
-        }
-    }
 
     // Function to call after recording
     fun processRecordedAudio(filePath: String) {
@@ -204,7 +188,6 @@ fun AudioRecordScreen(modifier: Modifier = Modifier) {
                             Log.e("AudioRecorder", "Tool execution flow failed: ${e.message}")
                             // As a last resort, keep the previous hardcoded behavior so the app remains functional
                             try {
-                                sendResult = context.contentResolver.sendHardcodedMessageToRasums()
                                 Log.d("AudioRecorder", "Last-resort hardcoded send result: $sendResult")
                             } catch (sendEx: Exception) {
                                 Log.e("AudioRecorder", "Last-resort hardcoded send failed: ${sendEx.message}")
@@ -275,11 +258,16 @@ fun AudioRecordScreen(modifier: Modifier = Modifier) {
 
                                 if (ttsMessage.isNotBlank()) {
                                     try {
-                                        val voiceId = "5kMbtRSEKIkRZSdXxrZg"
-                                        val ttsFile = ElevenLabsTts.textToSpeech(context, elevenApiKey, voiceId, ttsMessage)
-                                        ElevenLabsTts.playFromFile(context, ttsFile)
-                                        playedTts = true
-                                        Log.d("AudioRecorder", "Played TTS for message (truncated): ${ttsMessage.take(120)}")
+                                        // Convert the LLM's TTS text into audio and play it.
+                                        if (!elevenApiKey.isNullOrBlank()) {
+                                            val voiceId = "5kMbtRSEKIkRZSdXxrZg"
+                                            val ttsFile = ElevenLabsTts.textToSpeech(context, elevenApiKey, voiceId, ttsMessage)
+                                            ElevenLabsTts.playFromFile(context, ttsFile)
+                                            playedTts = true
+                                            Log.d("AudioRecorder", "Played TTS for message (truncated): ${ttsMessage.take(120)}")
+                                        } else {
+                                            Log.w("AudioRecorder", "ELEVENLABS_API_KEY missing; cannot play ttsMessage")
+                                        }
                                     } catch (ttsEx: Exception) {
                                         Log.e("AudioRecorder", "TTS generation/playback failed: ${ttsEx.message}")
                                     }
@@ -293,17 +281,29 @@ fun AudioRecordScreen(modifier: Modifier = Modifier) {
 
                         // Fallback: if LLM->TTS didn't play anything, use the assistantText directly
                         try {
-                            if (!playedTts && !assistantText.isNullOrBlank() && !elevenApiKey.isNullOrBlank()) {
-                                val voiceId = "5kMbtRSEKIkRZSdXxrZg"
-                                val ttsFile = ElevenLabsTts.textToSpeech(context, elevenApiKey, voiceId, assistantText)
-                                ElevenLabsTts.playFromFile(context, ttsFile)
-                                Log.d("AudioRecorder", "Fallback: played assistantText via TTS (truncated): ${assistantText.take(120)}")
+                            // Avoid reading raw JSON blobs aloud. Prefer the executed tool result (sendResult)
+                            // which should be a human-readable summary of the action. If that's not
+                            // available, fall back to assistantText only when it is plain text.
+                            if (!playedTts && !elevenApiKey.isNullOrBlank()) {
+                                val candidate = when {
+                                    !sendResult.isNullOrBlank() && !sendResult.trim().startsWith("{") -> sendResult
+                                    !assistantText.isNullOrBlank() && !assistantText.trim().startsWith("{") -> assistantText
+                                    else -> null
+                                }
+
+                                if (!candidate.isNullOrBlank()) {
+                                    val voiceId = "5kMbtRSEKIkRZSdXxrZg"
+                                    val ttsFile = ElevenLabsTts.textToSpeech(context, elevenApiKey, voiceId, candidate)
+                                    ElevenLabsTts.playFromFile(context, ttsFile)
+                                    Log.d("AudioRecorder", "Fallback: played text via TTS (truncated): ${candidate.take(120)}")
+                                    playedTts = true
+                                } else {
+                                    Log.w("AudioRecorder", "No suitable human-readable text to TTS; skipping fallback to avoid speaking raw JSON")
+                                }
                             }
                         } catch (fbEx: Exception) {
                             Log.e("AudioRecorder", "Fallback TTS failed: ${fbEx.message}")
                         }
-
-// ...existing code...
 
                     } catch (ex: Exception) {
                         Log.e("AudioRecorder", "LLM tool flow failed: ${ex.message}")
@@ -321,80 +321,54 @@ fun AudioRecordScreen(modifier: Modifier = Modifier) {
         color = MaterialTheme.colorScheme.background
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            if (!micPermissionGranted) {
-                // Permission request UI (unchanged)
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    Text(
-                        text = "Microphone permission required",
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.padding(bottom = 12.dp)
-                    )
-                    Text(
-                        text = "This screen needs access to your microphone so you can record audio.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.padding(bottom = 20.dp)
-                    )
-                    Button(onClick = { permissionLauncher.launch(Manifest.permission.RECORD_AUDIO) }) {
-                        Text(text = "Grant microphone permission")
-                    }
-                }
-            } else {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .pointerInput(Unit) {
-                            detectTapGestures(
-                                onPress = {
-                                    // Ensure we still have permission at the moment of starting
-                                    val hasPermission = ContextCompat.checkSelfPermission(
-                                        context,
-                                        Manifest.permission.RECORD_AUDIO
-                                    ) == PackageManager.PERMISSION_GRANTED
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(Unit) {
+                        detectTapGestures(
+                            onPress = {
+                                // Ensure we still have permission at the moment of starting
+                                val hasPermission = ContextCompat.checkSelfPermission(
+                                    context,
+                                    Manifest.permission.RECORD_AUDIO
+                                ) == PackageManager.PERMISSION_GRANTED
 
-                                    if (!hasPermission) {
-                                        // Ask for permission again
-                                        permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                                        Toast.makeText(context, "Microphone permission required", Toast.LENGTH_SHORT).show()
-                                    } else {
-                                        if (!isRecording) {
-                                            try {
-                                                outputFile = File.createTempFile("audio", ".wav", context.cacheDir)
-                                                isRecording = true
-                                                if (context is ComponentActivity) {
-                                                    recordingJob = context.lifecycleScope.launch(Dispatchers.IO) {
-                                                        recordAudioToWav(context, outputFile!!) { isRecording }
-                                                    }
+                                if (!hasPermission) {
+                                    // Since MainActivity owns the permission launcher, just inform the user
+                                    Toast.makeText(context, "Microphone permission required", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    if (!isRecording) {
+                                        try {
+                                            outputFile = File.createTempFile("audio", ".wav", context.cacheDir)
+                                            isRecording = true
+                                            if (context is ComponentActivity) {
+                                                recordingJob = context.lifecycleScope.launch(Dispatchers.IO) {
+                                                    recordAudioToWav(context, outputFile!!) { isRecording }
                                                 }
-                                            } catch (e: IOException) {
-                                                Log.e("AudioRecorder", "Failed to start: ${e.message}")
-                                                isRecording = false
                                             }
+                                        } catch (e: IOException) {
+                                            Log.e("AudioRecorder", "Failed to start: ${e.message}")
+                                            isRecording = false
                                         }
                                     }
-                                    tryAwaitRelease()
-                                    isRecording = false
-                                    recordingJob?.join() // Wait for recording to finish
-                                    outputFile?.let { file ->
-                                        Log.d("AudioRecorder", "Recorded file size: ${file.length()} bytes")
-                                        processRecordedAudio(file.absolutePath)
-                                    }
                                 }
-                            )
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = if (isRecording) "Recording..." else "Hold anywhere to record",
-                        style = MaterialTheme.typography.headlineMedium,
-                        modifier = Modifier.padding(16.dp)
-                    )
-                }
+                                tryAwaitRelease()
+                                isRecording = false
+                                recordingJob?.join() // Wait for recording to finish
+                                outputFile?.let { file ->
+                                    Log.d("AudioRecorder", "Recorded file size: ${file.length()} bytes")
+                                    processRecordedAudio(file.absolutePath)
+                                }
+                            }
+                        )
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = if (isRecording) "Recording..." else "Hold anywhere to record",
+                    style = MaterialTheme.typography.headlineMedium,
+                    modifier = Modifier.padding(16.dp)
+                )
             }
         }
     }
@@ -446,7 +420,7 @@ suspend fun recordAudioToWav(context: Context, outputFile: File, isRecording: ()
                 audioRecord.read(buffer, 0, buffer.size)
             } catch (se: SecurityException) {
                 Log.e("AudioRecorder", "read denied by SecurityException: ${se.message}")
-                break
+                -1
             }
             if (read > 0) {
                 baos.write(buffer, 0, read)

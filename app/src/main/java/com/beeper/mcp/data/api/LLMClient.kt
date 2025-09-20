@@ -187,7 +187,7 @@ object LLMClient {
             Log.e("LLMClient", "Failed to prepare chats context: ${e.message}")
         }
 
-        val initialMessages = buildMessages(transcript, chatsExtra)`¡
+        val initialMessages = buildMessages(transcript, chatsExtra)
         val initialResp = callLLM(initialMessages, tools)
         val choice = initialResp.getJSONArray("choices").getJSONObject(0)
         val message = choice.getJSONObject("message")

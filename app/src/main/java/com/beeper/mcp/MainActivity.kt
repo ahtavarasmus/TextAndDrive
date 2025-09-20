@@ -27,6 +27,7 @@ const val BEEPER_AUTHORITY = "com.beeper.api"
 
 class MainActivity : ComponentActivity() {
     private var permissionsGranted by mutableStateOf(false)
+    private var micPermissionGranted by mutableStateOf(false)
 
     private val beeperPermissions = mutableListOf(
         "com.beeper.android.permission.READ_PERMISSION",
@@ -43,6 +44,13 @@ class MainActivity : ComponentActivity() {
         permissionsGranted = permissions.values.all { it }
     }
 
+    // Microphone permission launcher
+    private val micPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        micPermissionGranted = granted
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -51,19 +59,22 @@ class MainActivity : ComponentActivity() {
         setContent {
             BeeperMcpTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                    if (permissionsGranted) {
+                    // Show the recorder only when both Beeper and microphone permissions are granted
+                    if (permissionsGranted && micPermissionGranted) {
                         AudioRecordScreen(modifier = Modifier.padding(innerPadding))
                     } else {
                         PermissionStatus(
                             permissionsGranted = permissionsGranted,
+                            micPermissionGranted = micPermissionGranted,
                             modifier = Modifier.padding(innerPadding),
-                            onRequestPermissions = { requestBeeperPermissions() }
+                            onRequestPermissions = { requestBeeperPermissions() },
+                            onRequestMic = { micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO) }
                         )
                     }
                 }
             }
         }
-        if (permissionsGranted) {
+        if (permissionsGranted && micPermissionGranted) {
             lifecycleScope.launch {
                 // Sample tool call for "get_chats" (mimics OpenAI response format)
                 val toolCall = mapOf(
@@ -74,7 +85,6 @@ class MainActivity : ComponentActivity() {
                 try {
                     val result = contentResolver.handleOpenAIToolCallMock(toolCall)
                     Log.d("ToolTest", "Get Chats Result:\n$result")  // Inspect this in Logcat
-                    // Optional: Toast.makeText(this@MainActivity, result.take(200), Toast.LENGTH_LONG).show()  // Show snippet on screen
                 } catch (e: Exception) {
                     Log.e("ToolTest", "Error: ${e.message}", e)
                 }
@@ -91,6 +101,10 @@ class MainActivity : ComponentActivity() {
         permissionsGranted = beeperPermissions.all { permission ->
             ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
         }
+        micPermissionGranted = ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.RECORD_AUDIO
+        ) == PackageManager.PERMISSION_GRANTED
     }
 
     private fun requestBeeperPermissions() {
@@ -100,6 +114,10 @@ class MainActivity : ComponentActivity() {
         if (permissionsToRequest.isNotEmpty()) {
             permissionLauncher.launch(permissionsToRequest)
         }
+        // Also request microphone if missing
+        if (!micPermissionGranted) {
+            micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+        }
     }
 }
 
@@ -107,11 +125,13 @@ class MainActivity : ComponentActivity() {
 fun PermissionStatus(
     modifier: Modifier = Modifier,
     permissionsGranted: Boolean = false,
-    onRequestPermissions: () -> Unit = {}
+    micPermissionGranted: Boolean = false,
+    onRequestPermissions: () -> Unit = {},
+    onRequestMic: () -> Unit = {}
 ) {
     Column(modifier = modifier.padding(16.dp)) {
         Text(
-            text = "🤖 Beeper Tools",
+            text = "In order for our app to work smoothly, we would need these permissions from you:",
             style = MaterialTheme.typography.headlineMedium,
             modifier = Modifier.padding(bottom = 24.dp)
         )
@@ -121,21 +141,33 @@ fun PermissionStatus(
             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
-                // Permissions Row
+                // Beeper Permissions Row
                 StatusRow(
-                    label = "Permissions",
+                    label = "Beeper permissions",
                     status = if (permissionsGranted) "✅ Granted" else "❌ Not Granted",
                     statusColor = if (permissionsGranted) Color(0xFF4CAF50) else Color(0xFFF44336),
                     buttonText = "Fix",
                     showButton = !permissionsGranted,
                     onButtonClick = onRequestPermissions
                 )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Microphone Permissions Row
+                StatusRow(
+                    label = "Microphone",
+                    status = if (micPermissionGranted) "✅ Granted" else "❌ Not Granted",
+                    statusColor = if (micPermissionGranted) Color(0xFF4CAF50) else Color(0xFFF44336),
+                    buttonText = "Fix",
+                    showButton = !micPermissionGranted,
+                    onButtonClick = onRequestMic
+                )
             }
         }
         // Warning message (optional, removed server-specific warning)
         Spacer(modifier = Modifier.height(16.dp))
         Text(
-            text = "⚠️ Ensure Beeper app is installed and running",
+            text = "⚠ Ensure Beeper app is installed",
             style = MaterialTheme.typography.bodyMedium,
             color = Color(0xFFFF9800),
             textAlign = TextAlign.Center,

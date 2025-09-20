@@ -75,4 +75,20 @@ object ElevenLabsTts {
         mp.setOnCompletionListener { it.release() }
         mp.start()
     }
+
+    /**
+     * Example usage: Calls textToSpeech and logs the output file path.
+     * Replace `YOUR_API_KEY` with the actual key, or use BuildConfig if exposed.
+     */
+    suspend fun demoCallAndLog(context: Context) {
+        val apiKey = "YOUR_API_KEY" // TODO: Replace with actual API key retrieval
+        val voiceId = "YOUR_VOICE_ID" // TODO: Replace with actual voice ID
+        val text = "Hello from ElevenLabs!"
+        try {
+            val file = textToSpeech(context, apiKey, voiceId, text)
+            android.util.Log.d("ElevenLabsTts", "TTS file generated at: ${file.absolutePath}")
+        } catch (e: Exception) {
+            android.util.Log.e("ElevenLabsTts", "TTS call failed: ${e.message}")
+        }
+    }
 }
