@@ -1,5 +1,4 @@
 package com.beeper.mcp
-
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
@@ -21,16 +20,21 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.beeper.mcp.data.api.ElevenLabsStt
 import com.beeper.mcp.data.api.ElevenLabsTts
 import com.beeper.mcp.data.api.STT
 import com.beeper.mcp.tools.getChatsFormatted
+import com.beeper.mcp.tools.getChatsFormattedMock
 import com.beeper.mcp.tools.sendHardcodedMessageToRasums
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -41,7 +45,9 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
 import java.security.MessageDigest
+import com.beeper.mcp.HitchhikerColors
 import kotlin.concurrent.thread
+
 
 class AudioRecorderActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -49,7 +55,6 @@ class AudioRecorderActivity : ComponentActivity() {
         enableEdgeToEdge()
     }
 }
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AudioRecordScreen(
@@ -61,7 +66,6 @@ fun AudioRecordScreen(
     var isRecording by remember { mutableStateOf(false) }
     var recordingJob: Job? by remember { mutableStateOf(null) }
     var outputFile: File? by remember { mutableStateOf(null) }
-
     // Function to call after recording
     fun processRecordedAudio(filePath: String) {
         val ApiKey = BuildConfig.TINFOIL_API_KEY
@@ -76,14 +80,13 @@ fun AudioRecordScreen(
                     try {
                         Log.d("AudioRecorder", "Calling getChatsFormatted for LLM context...")
                         val startTime = System.currentTimeMillis()
-
                         // Create args map with default parameters
                         val args = mapOf<String, Any?>(
                             "limit" to 35, // Get more chats for better context
                             "offset" to 0
                         )
                         chatsResult = if (isDemo) {
-                            "Mock chats:\nChat1: Friend: Hello\nYou: Hi\nChat2: Group: Meeting at 5"
+                            context.contentResolver.getChatsFormattedMock(args)
                         } else {
                             context.contentResolver.getChatsFormatted(args)
                         }
@@ -102,9 +105,8 @@ fun AudioRecordScreen(
                         appendLine("User transcript: $transcription")
                         appendLine()
                         appendLine("Available chats context:")
-                        appendLine(chatsResult)  // Include the actual fetched chats
+                        appendLine(chatsResult) // Include the actual fetched chats
                     }
-
                     // Send transcript to LLM with tools and chats context
                     try {
                         val tinfoilKey = try { BuildConfig.TINFOIL_API_KEY } catch (_: Exception) { "" }
@@ -117,14 +119,6 @@ fun AudioRecordScreen(
                             } catch (e: Exception) { "<hash-error>" }
                             Log.d("AudioRecorder", "TINFOIL_API_KEY present: length=${tinfoilKey.length}, masked=$masked, sha256=$sha256")
                         }
-
-                        // Create enhanced transcript with chats context
-                        val enhancedTranscript = buildString {
-                            appendLine("User transcript: $transcription")
-                            appendLine()
-                            appendLine("Available chats context:")
-                        }
-
                         Log.d("AudioRecorder", "Sending enhanced transcript with chats context to LLM")
                         // Record user message into the LLM client's rolling history so the model
                         // can use the previous back-and-forth context (up to 5 exchanges).
@@ -132,10 +126,8 @@ fun AudioRecordScreen(
                             com.beeper.mcp.data.api.LLMClient.addUserMessage(enhancedTranscript)
                         } catch (_: Exception) {
                         }
-
                         var assistantText = com.beeper.mcp.data.api.LLMClient
                             .sendTranscriptWithTools(context, tinfoilKey, enhancedTranscript, context.contentResolver)
-
                         // Defensive normalization: sometimes the LLM client returns the
                         // literal string "null" (or a null reference). Normalize to empty
                         // string so downstream code and logs are unambiguous.
@@ -143,19 +135,15 @@ fun AudioRecordScreen(
                             Log.d("AudioRecorder", "LLM returned null content; normalizing to empty string")
                             assistantText = ""
                         }
-
                         Log.d("AudioRecorder", "Assistant reply: $assistantText")
-
                         // Save assistant response back into the LLM client's rolling history
                         try {
                             if (!assistantText.isNullOrBlank()) com.beeper.mcp.data.api.LLMClient.addAssistantMessage(assistantText)
                         } catch (_: Exception) {
                         }
-
                         // Track whether we've already played a TTS message so we don't duplicate playback
                         var playedTts = false
                         var sendResult = ""
-
                         // Instead of sending a hardcoded message, inspect the assistant reply.
                         // If it contains a function_call wrapper, execute the named tool using
                         // the project's OpenAI tool handler. Otherwise, fall back to treating
@@ -174,15 +162,13 @@ fun AudioRecordScreen(
                                             is String -> fargs
                                             else -> "{}"
                                         }
-
                                         val toolCallMap = mapOf<String, Any>(
                                             "name" to fname,
                                             "arguments" to argsJsonString
                                         )
-
                                         // Execute the tool call using the ContentResolver helper.
                                         sendResult = if (isDemo) {
-                                            "Mock tool call executed: $fname with args $argsJsonString"
+                                            context.contentResolver.handleOpenAIToolCallMock(toolCallMap)
                                         } else {
                                             context.contentResolver.handleOpenAIToolCall(toolCallMap)
                                         }
@@ -220,7 +206,6 @@ fun AudioRecordScreen(
                                 Log.e("AudioRecorder", "Last-resort hardcoded send failed: ${sendEx.message}")
                             }
                         }
-
                         // After sending the hardcoded message, call the LLM again to produce
                         // a short message that should be sent to ElevenLabs TTS, then play it.
                         try {
@@ -243,20 +228,15 @@ fun AudioRecordScreen(
                                     appendLine("")
                                     appendLine("Return ONLY the spoken confirmation message, nothing else. No JSON, no explanations.")
                                 }
-
-
                                 // Record the TTS prompt as a user message so the LLM has the preceding
                                 // context when generating the spoken confirmation.
                                 try {
                                     com.beeper.mcp.data.api.LLMClient.addUserMessage(ttsPrompt)
                                 } catch (_: Exception) {
                                 }
-
                                 var ttsMessage = com.beeper.mcp.data.api.LLMClient
                                     .sendTranscriptWithTools(context, tinfoilKey, ttsPrompt, context.contentResolver)
-
                                 if (ttsMessage == null || ttsMessage == "null") ttsMessage = ""
-
                                 // If the LLM returned a function_call wrapper JSON, try to extract a message
                                 val trimmed = ttsMessage.trim()
                                 if (trimmed.startsWith("{")) {
@@ -272,7 +252,6 @@ fun AudioRecordScreen(
                                         if (!candidate.isNullOrBlank()) {
                                             ttsMessage = candidate
                                         }
-
                                         // Save the assistant's TTS-generation reply into history as well
                                         try {
                                             if (!ttsMessage.isNullOrBlank()) com.beeper.mcp.data.api.LLMClient.addAssistantMessage(ttsMessage)
@@ -282,7 +261,6 @@ fun AudioRecordScreen(
                                         // ignore parse errors and fall back to raw text
                                     }
                                 }
-
                                 if (ttsMessage.isNotBlank()) {
                                     try {
                                         // Convert the LLM's TTS text into audio and play it.
@@ -305,7 +283,6 @@ fun AudioRecordScreen(
                         } catch (flowEx: Exception) {
                             Log.e("AudioRecorder", "LLM->TTS flow failed: ${flowEx.message}")
                         }
-
                         // Fallback: if LLM->TTS didn't play anything, use the assistantText directly
                         try {
                             // Avoid reading raw JSON blobs aloud. Prefer the executed tool result (sendResult)
@@ -317,7 +294,6 @@ fun AudioRecordScreen(
                                     !assistantText.isNullOrBlank() && !assistantText.trim().startsWith("{") -> assistantText
                                     else -> null
                                 }
-
                                 if (!candidate.isNullOrBlank()) {
                                     val voiceId = "5kMbtRSEKIkRZSdXxrZg"
                                     val ttsFile = ElevenLabsTts.textToSpeech(context, elevenApiKey, voiceId, candidate)
@@ -331,7 +307,6 @@ fun AudioRecordScreen(
                         } catch (fbEx: Exception) {
                             Log.e("AudioRecorder", "Fallback TTS failed: ${fbEx.message}")
                         }
-
                     } catch (ex: Exception) {
                         Log.e("AudioRecorder", "LLM tool flow failed: ${ex.message}")
                     }
@@ -341,21 +316,25 @@ fun AudioRecordScreen(
             }
         }
     }
-
     // Full-screen content
     Surface(
         modifier = modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.background
+        color = HitchhikerColors.Background
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             if (onBack != null) {
                 TopAppBar(
-                    title = { Text(if (isDemo) "Demo Mode" else "Real Mode") },
+                    title = { Text(if (isDemo) "Marvin's Demo Inbox" else "Real Mode (Poor Marvin)", color = HitchhikerColors.OnBackground) },
                     navigationIcon = {
                         IconButton(onClick = onBack) {
-                            Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                            Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = HitchhikerColors.OnBackground)
                         }
-                    }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = HitchhikerColors.Background,
+                        navigationIconContentColor = HitchhikerColors.OnBackground,
+                        titleContentColor = HitchhikerColors.OnBackground
+                    )
                 )
             }
             Box(
@@ -369,7 +348,6 @@ fun AudioRecordScreen(
                                     context,
                                     Manifest.permission.RECORD_AUDIO
                                 ) == PackageManager.PERMISSION_GRANTED
-
                                 if (!hasPermission) {
                                     // Since MainActivity owns the permission launcher, just inform the user
                                     Toast.makeText(context, "Microphone permission required", Toast.LENGTH_SHORT).show()
@@ -401,16 +379,55 @@ fun AudioRecordScreen(
                     },
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = if (isRecording) "Recording..." else "Hold anywhere to record",
-                    style = MaterialTheme.typography.headlineMedium,
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier.padding(16.dp)
-                )
+                ) {
+                    Text(
+                        text = if (isRecording) "Recording... (Marvin's Listening, Unhappily)" else "Hold Anywhere to Talk to Marvin",
+                        style = MaterialTheme.typography.headlineMedium.copy(color = HitchhikerColors.OnBackground),
+                        textAlign = TextAlign.Center
+                    )
+                    if (isDemo && !isRecording) {
+                        Spacer(modifier = Modifier.height(24.dp))
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth(0.8f)
+                                .padding(8.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = HitchhikerColors.Surface.copy(alpha = 0.8f)
+                            ),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(16.dp)
+                            ) {
+                                Text(
+                                    text = "Peek into Marvin's Inbox (Demo):",
+                                    style = MaterialTheme.typography.titleMedium.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        color = HitchhikerColors.OnSurface
+                                    ),
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.padding(bottom = 8.dp)
+                                )
+                                Text(
+                                    text = "- Ask about Arthur Dent: 'What's new from Arthur Dent?'\n- Reply to Ford: 'Tell Ford I'm busy calculating the improbability of this app'\n- or just ask 'What can you do?'",
+                                    style = MaterialTheme.typography.bodyMedium.copy(
+                                        fontSize = 14.sp,
+                                        lineHeight = 18.sp,
+                                        color = HitchhikerColors.OnSurface
+                                    ),
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
     }
 }
-
 // Function to record raw PCM and save as WAV (runs on IO dispatcher)
 suspend fun recordAudioToWav(context: Context, outputFile: File, isRecording: () -> Boolean) {
     val sampleRate = 16000
@@ -424,7 +441,6 @@ suspend fun recordAudioToWav(context: Context, outputFile: File, isRecording: ()
             Log.e("AudioRecorder", "Invalid buffer size returned: $minBufferSize")
             return
         }
-
         audioRecord = AudioRecord(
             MediaRecorder.AudioSource.MIC,
             sampleRate,
@@ -432,15 +448,12 @@ suspend fun recordAudioToWav(context: Context, outputFile: File, isRecording: ()
             audioFormat,
             minBufferSize * 2
         )
-
         if (audioRecord.state != AudioRecord.STATE_INITIALIZED) {
             Log.e("AudioRecorder", "AudioRecord not initialized (state=${audioRecord.state})")
             audioRecord.release()
             return
         }
-
         val baos = ByteArrayOutputStream()
-
         try {
             audioRecord.startRecording()
         } catch (se: SecurityException) {
@@ -450,7 +463,6 @@ suspend fun recordAudioToWav(context: Context, outputFile: File, isRecording: ()
             }
             return
         }
-
         while (isRecording()) {
             val buffer = ByteArray(minBufferSize)
             val read = try {
@@ -463,7 +475,6 @@ suspend fun recordAudioToWav(context: Context, outputFile: File, isRecording: ()
                 baos.write(buffer, 0, read)
             }
         }
-
         try {
             audioRecord.stop()
         } catch (e: IllegalStateException) {
@@ -471,13 +482,10 @@ suspend fun recordAudioToWav(context: Context, outputFile: File, isRecording: ()
         } catch (se: SecurityException) {
             Log.e("AudioRecorder", "stop denied by SecurityException: ${se.message}")
         }
-
         // Get raw PCM data
         val rawData = baos.toByteArray()
-
         // Create WAV header
         val header = createWavHeader(rawData.size, sampleRate, 1, 16) // mono, 16-bit
-
         // Write to file
         withContext(Dispatchers.IO) {
             FileOutputStream(outputFile).use { fos ->
@@ -500,14 +508,12 @@ suspend fun recordAudioToWav(context: Context, outputFile: File, isRecording: ()
         }
     }
 }
-
 // Helper to create WAV header
 fun createWavHeader(dataLength: Int, sampleRate: Int, channels: Int, bitsPerSample: Int): ByteArray {
     val header = ByteArray(44)
     val totalDataLen = dataLength + 36
     val byteRate = sampleRate * channels * bitsPerSample / 8
     val blockAlign = channels * bitsPerSample / 8
-
     header[0] = 'R'.code.toByte()
     header[1] = 'I'.code.toByte()
     header[2] = 'F'.code.toByte()
@@ -516,68 +522,63 @@ fun createWavHeader(dataLength: Int, sampleRate: Int, channels: Int, bitsPerSamp
     header[5] = ((totalDataLen shr 8) and 0xff).toByte()
     header[6] = ((totalDataLen shr 16) and 0xff).toByte()
     header[7] = ((totalDataLen shr 24) and 0xff).toByte()
-
     header[8] = 'W'.code.toByte()
     header[9] = 'A'.code.toByte()
     header[10] = 'V'.code.toByte()
     header[11] = 'E'.code.toByte()
-
     header[12] = 'f'.code.toByte()
     header[13] = 'm'.code.toByte()
     header[14] = 't'.code.toByte()
     header[15] = ' '.code.toByte()
-
     header[16] = 16.toByte() // Subchunk1Size for PCM
     header[17] = 0.toByte()
     header[18] = 0.toByte()
     header[19] = 0.toByte()
-
     header[20] = 1.toByte() // AudioFormat PCM
     header[21] = 0.toByte()
-
     header[22] = channels.toByte()
     header[23] = 0.toByte()
-
     header[24] = (sampleRate and 0xff).toByte()
     header[25] = ((sampleRate shr 8) and 0xff).toByte()
     header[26] = ((sampleRate shr 16) and 0xff).toByte()
     header[27] = ((sampleRate shr 24) and 0xff).toByte()
-
     header[28] = (byteRate and 0xff).toByte()
     header[29] = ((byteRate shr 8) and 0xff).toByte()
     header[30] = ((byteRate shr 16) and 0xff).toByte()
     header[31] = ((byteRate shr 24) and 0xff).toByte()
-
     header[32] = blockAlign.toByte()
     header[33] = 0.toByte()
-
     header[34] = bitsPerSample.toByte()
     header[35] = 0.toByte()
-
     header[36] = 'd'.code.toByte()
     header[37] = 'a'.code.toByte()
     header[38] = 't'.code.toByte()
     header[39] = 'a'.code.toByte()
-
     header[40] = (dataLength and 0xff).toByte()
     header[41] = ((dataLength shr 8) and 0xff).toByte()
     header[42] = ((dataLength shr 16) and 0xff).toByte()
     header[43] = ((dataLength shr 24) and 0xff).toByte()
-
     return header
 }
-
 @Preview(showBackground = true)
 @Composable
 fun AudioRecordScreenPreview() {
-    TextAndDriveTheme {
+    HitchhikerTheme {
         AudioRecordScreen()
     }
 }
-
 @Composable
-fun TextAndDriveTheme(content: @Composable () -> Unit) {
-    MaterialTheme {
+fun HitchhikerTheme(content: @Composable () -> Unit) {
+    MaterialTheme(
+        colorScheme = lightColorScheme( // Or dark, but matching the black bg
+            primary = HitchhikerColors.Primary,
+            background = HitchhikerColors.Background,
+            surface = HitchhikerColors.Surface,
+            onBackground = HitchhikerColors.OnBackground,
+            onSurface = HitchhikerColors.OnSurface,
+            // Add more as needed
+        )
+    ) {
         content()
     }
 }

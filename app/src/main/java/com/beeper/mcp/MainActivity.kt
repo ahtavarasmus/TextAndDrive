@@ -15,7 +15,6 @@ import android.util.Log
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -23,27 +22,35 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.background
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import com.beeper.mcp.ui.theme.BeeperMcpTheme
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONObject
+import java.io.IOException
 const val BEEPER_AUTHORITY = "com.beeper.api"
-// Modern Color Palette inspired by Claude
-object ModernColors {
-    val Primary = Color(0xFFE97C4C) // Warm orange-red (Claude inspired)
-    val PrimaryVariant = Color(0xFFD4663A)
-    val Secondary = Color(0xFF4A5568) // Sophisticated gray-blue
-    val Background = Color(0xFFF8FAFC) // Clean light background
-    val Surface = Color(0xFFFFFFFF)
-    val OnPrimary = Color(0xFFFFFFFF)
-    val OnBackground = Color(0xFF1A202C) // Deep text color
-    val OnSurface = Color(0xFF2D3748)
-    val Success = Color(0xFF10B981) // Modern green
-    val Error = Color(0xFFEF4444) // Modern red
-    val Warning = Color(0xFFF59E0B) // Modern amber
+// Hitchhiker's Guide to the Galaxy theme: Goofy green vibes, dark space background, with a touch of improbability
+object HitchhikerColors {
+    val Primary = Color(0xFF2E7D32) // Deep green like the Guide's cover
+    val Background = Color(0xFF000000) // Vast emptiness of space
+    val Surface = Color(0xFF1B1B1B) // Dim starlight panels
+    val OnBackground = Color(0xFFFFFFFF) // Bright text to pierce the void
+    val OnSurface = Color(0xFFBDBDBD) // Silvery text for that metallic spaceship feel
+    val Success = Color(0xFF4CAF50) // Goofy green success, like finding the answer 42
+    val Error = Color(0xFFFF5722) // Fiery error, Vogons would approve
 }
 class MainActivity : ComponentActivity() {
     private var permissionsGranted by mutableStateOf(false)
     private var micPermissionGranted by mutableStateOf(false)
     // Tracks whether the user chose the demo flow or the real flow (or still choosing)
-    private var appMode by mutableStateOf("choice") // values: "choice", "demo", "real"
+    private var appMode by mutableStateOf("choice") // values: "choice", "demo", "real", "interest"
     private val beeperPermissions = mutableListOf(
         "com.beeper.android.permission.READ_PERMISSION",
         "com.beeper.android.permission.SEND_PERMISSION"
@@ -74,18 +81,23 @@ class MainActivity : ComponentActivity() {
             BeeperMcpTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
-                    color = ModernColors.Background
+                    color = HitchhikerColors.Background
                 ) {
                     Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                        // Initial choice screen: Demo vs Real
+                        // Initial choice screen: Demo vs Real vs Interest
                         when (appMode) {
                             "choice" -> ChoiceScreen(
                                 modifier = Modifier.padding(innerPadding),
                                 onDemo = { appMode = "demo" },
-                                onReal = { appMode = "real" }
+                                onReal = { appMode = "real" },
+                                onInterest = { appMode = "interest" }
+                            )
+                            "interest" -> InterestScreen(
+                                modifier = Modifier.padding(innerPadding),
+                                onBack = { appMode = "choice" }
                             )
                             "demo" -> {
-                                // Demo flow: require only microphone permissions
+                                // Demo flow: require only microphone permissions, showcase Marvin's inbox
                                 if (micPermissionGranted) {
                                     AudioRecordScreen(
                                         modifier = Modifier.padding(innerPadding),
@@ -127,7 +139,8 @@ class MainActivity : ComponentActivity() {
                                 ChoiceScreen(
                                     modifier = Modifier.padding(innerPadding),
                                     onDemo = { appMode = "demo" },
-                                    onReal = { appMode = "real" }
+                                    onReal = { appMode = "real" },
+                                    onInterest = { appMode = "interest" }
                                 )
                             }
                         }
@@ -182,151 +195,226 @@ class MainActivity : ComponentActivity() {
 fun ChoiceScreen(
     modifier: Modifier = Modifier,
     onDemo: () -> Unit = {},
-    onReal: () -> Unit = {}
+    onReal: () -> Unit = {},
+    onInterest: () -> Unit = {}
 ) {
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(ModernColors.Background)
-            .padding(32.dp),
+            .background(HitchhikerColors.Background)
+            .padding(24.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
-            text = "Choose Mode",
+            text = "DON'T PANIC!",
             style = MaterialTheme.typography.headlineLarge.copy(
                 fontSize = 32.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = (-0.5).sp
+                fontWeight = FontWeight.Bold
             ),
-            color = ModernColors.OnBackground,
-            modifier = Modifier.padding(bottom = 16.dp)
+            color = HitchhikerColors.Primary,
+            modifier = Modifier.padding(bottom = 8.dp)
         )
         Text(
-            text = "Select how you'd like to experience the app",
+            text = "Voice-Command Your Messages on WhatsApp, iMessage & More – Hands-Free Chat via Beeper (Install & Connect Your Networks for Galactic Convenience)",
             style = MaterialTheme.typography.bodyLarge.copy(
                 fontSize = 16.sp
             ),
-            color = ModernColors.Secondary,
+            color = HitchhikerColors.OnSurface,
             textAlign = TextAlign.Center,
-            modifier = Modifier.padding(bottom = 48.dp)
+            modifier = Modifier.padding(bottom = 32.dp)
         )
-        Card(
+        Button(
+            onClick = onDemo,
             modifier = Modifier
                 .fillMaxWidth()
+                .height(56.dp)
                 .padding(bottom = 16.dp),
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = ModernColors.Surface
-            ),
-            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+            colors = ButtonDefaults.buttonColors(
+                containerColor = HitchhikerColors.Primary
+            )
         ) {
-            Column(
-                modifier = Modifier.padding(24.dp)
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(bottom = 12.dp)
-                ) {
-                    Text(
-                        text = "🚀",
-                        style = MaterialTheme.typography.headlineMedium.copy(fontSize = 28.sp),
-                        modifier = Modifier.padding(end = 12.dp)
-                    )
-                    Text(
-                        text = "Demo App",
-                        style = MaterialTheme.typography.headlineSmall.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 24.sp
-                        ),
-                        color = ModernColors.OnSurface
-                    )
-                }
-                Text(
-                    text = "Has premade data so you don't need to sync your WhatsApp",
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        fontSize = 15.sp,
-                        lineHeight = 20.sp
-                    ),
-                    color = ModernColors.Secondary,
-                    modifier = Modifier.padding(bottom = 16.dp)
+            Text("Try Demo: Chat with Marvin's Inbox (No Setup Needed)")
+        }
+        Button(
+            onClick = onReal,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp)
+                .padding(bottom = 16.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = HitchhikerColors.Primary.copy(alpha = 0.7f)
+            )
+        ) {
+            Text("Real Mode: Your Actual Chats (Needs Beeper, Poor Marvin)")
+        }
+        OutlinedButton(
+            onClick = onInterest,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp),
+            colors = ButtonDefaults.outlinedButtonColors(
+                contentColor = HitchhikerColors.Primary
+            )
+        ) {
+            Text("Sign Up for Launch (We'll Towel You In)")
+        }
+        // Funny small print legal disclaimer
+        Spacer(modifier = Modifier.height(32.dp))
+        Text(
+            text = "* Not for real-world driving—brains the size of planets shouldn't be wasted on that. Only for video games or improbably flying the Heart of Gold. Vogon poetry responses not guaranteed.",
+            style = MaterialTheme.typography.bodySmall,
+            color = HitchhikerColors.OnSurface.copy(alpha = 0.7f),
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 16.dp)
+        )
+    }
+}
+@Composable
+fun InterestScreen(
+    modifier: Modifier = Modifier,
+    onBack: () -> Unit
+) {
+    var email by remember { mutableStateOf("") }
+    var amount by remember { mutableStateOf("") }
+    var submitted by remember { mutableStateOf(false) }
+    var isSubmitting by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    if (submitted) {
+        Column(
+            modifier = modifier
+                .fillMaxSize()
+                .background(HitchhikerColors.Background)
+                .padding(24.dp),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = "Thanks! We'll notify you when it's improbably ready. (Don't forget your towel.)",
+                style = MaterialTheme.typography.headlineSmall,
+                color = HitchhikerColors.Success,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(bottom = 16.dp)
+            )
+            Button(
+                onClick = onBack,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = HitchhikerColors.Primary
                 )
-                Button(
-                    onClick = onDemo,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = ModernColors.Primary
-                    ),
-                    shape = RoundedCornerShape(16.dp)
-                ) {
-                    Text(
-                        "Try Demo",
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 16.sp
-                        )
-                    )
-                }
+            ) {
+                Text("Back to the Pantry")
             }
         }
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(20.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = ModernColors.Surface
-            ),
-            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+    } else {
+        Column(
+            modifier = modifier
+                .fillMaxSize()
+                .background(HitchhikerColors.Background)
+                .padding(24.dp),
+            verticalArrangement = Arrangement.Center
         ) {
-            Column(
-                modifier = Modifier.padding(24.dp)
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(bottom = 12.dp)
-                ) {
-                    Text(
-                        text = "⚡",
-                        style = MaterialTheme.typography.headlineMedium.copy(fontSize = 28.sp),
-                        modifier = Modifier.padding(end = 12.dp)
-                    )
-                    Text(
-                        text = "Real App",
-                        style = MaterialTheme.typography.headlineSmall.copy(
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 24.sp
-                        ),
-                        color = ModernColors.OnSurface
-                    )
-                }
-                Text(
-                    text = "Real data, you would have to sync our App with your WhatsApp to work",
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        fontSize = 15.sp,
-                        lineHeight = 20.sp
-                    ),
-                    color = ModernColors.Secondary,
-                    modifier = Modifier.padding(bottom = 16.dp)
+            Text(
+                text = "Want to Hitch a Ride on This App?",
+                style = MaterialTheme.typography.headlineSmall.copy(
+                    fontWeight = FontWeight.Bold
+                ),
+                color = HitchhikerColors.OnBackground,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+            Text(
+                text = "It'll be 100% private—like the Ultimate Question hidden in a teapot. (Demo's private now, but verifiability is still orbiting.)",
+                style = MaterialTheme.typography.bodyMedium,
+                color = HitchhikerColors.OnSurface,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(bottom = 32.dp)
+            )
+            OutlinedTextField(
+                value = email,
+                onValueChange = { email = it },
+                label = { Text("Your email (no spam, promise)") },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 16.dp),
+                singleLine = true,
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = HitchhikerColors.Primary,
+                    unfocusedBorderColor = HitchhikerColors.OnSurface.copy(alpha = 0.5f)
                 )
-                Button(
-                    onClick = onReal,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = ModernColors.Primary
-                    ),
-                    shape = RoundedCornerShape(16.dp)
-                ) {
-                    Text(
-                        "Use Real Data",
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 16.sp
-                        )
-                    )
+            )
+            OutlinedTextField(
+                value = amount,
+                onValueChange = { amount = it },
+                label = { Text("Willing to pay (e.g., $5/month for infinite improbability)") },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 24.dp),
+                singleLine = true,
+                prefix = { Text("$") },
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = HitchhikerColors.Primary,
+                    unfocusedBorderColor = HitchhikerColors.OnSurface.copy(alpha = 0.5f)
+                )
+            )
+            Button(
+                onClick = {
+                    if (email.isNotBlank() && amount.isNotBlank()) {
+                        isSubmitting = true
+                        (context as? ComponentActivity)?.lifecycleScope?.launch {
+                            try {
+                                addToResendAudience(email, amount)
+                                submitted = true
+                            } catch (e: Exception) {
+                                Log.e("InterestScreen", "Submit failed: ${e.message}")
+                            } finally {
+                                isSubmitting = false
+                            }
+                        }
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !isSubmitting && email.isNotBlank() && amount.isNotBlank(),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = HitchhikerColors.Primary
+                )
+            ) {
+                if (isSubmitting) {
+                    Text("Beaming Up...")
+                } else {
+                    Text("Submit & Mostly Harmless Pay")
                 }
+            }
+            TextButton(
+                onClick = onBack,
+                modifier = Modifier.align(Alignment.CenterHorizontally),
+                colors = ButtonDefaults.textButtonColors(
+                    contentColor = HitchhikerColors.Primary
+                )
+            ) {
+                Text("Back (Or Hitch Another Ride)")
+            }
+        }
+    }
+}
+private suspend fun addToResendAudience(email: String, amount: String) {
+    withContext(Dispatchers.IO) {
+        val resendApiKey = BuildConfig.RESEND_API_KEY // Assume added to BuildConfig
+        val audienceId = "your_audience_id_here" // Hardcode or from props
+        val client = OkHttpClient()
+        val json = JSONObject().apply {
+            put("email", email)
+            put("name", amount) // Use amount as 'name' field
+        }
+        val body = json.toString().toRequestBody("application/json".toMediaType())
+        val request = Request.Builder()
+            .url("https://api.resend.com/audiences/$audienceId/contacts")
+            .addHeader("Authorization", "Bearer $resendApiKey")
+            .addHeader("Content-Type", "application/json")
+            .post(body)
+            .build()
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) {
+                throw IOException("Resend API failed: ${response.code} - ${response.body?.string()}")
             }
         }
     }
@@ -342,52 +430,49 @@ fun PermissionStatus(
 ) {
     Column(
         modifier = modifier
-            .background(ModernColors.Background)
+            .background(HitchhikerColors.Background)
             .padding(24.dp)
     ) {
         Text(
-            text = "Permissions Required",
-            style = MaterialTheme.typography.headlineLarge.copy(
-                fontSize = 28.sp,
+            text = "Permissions: Marvin Needs a Brain Upload",
+            style = MaterialTheme.typography.headlineSmall.copy(
                 fontWeight = FontWeight.Bold,
-                letterSpacing = (-0.5).sp
+                fontSize = 24.sp
             ),
-            color = ModernColors.OnBackground,
+            color = HitchhikerColors.OnBackground,
             modifier = Modifier.padding(bottom = 8.dp)
         )
         Text(
-            text = "In order for our app to work smoothly, we would need these permissions from you:",
-            style = MaterialTheme.typography.bodyLarge.copy(
-                fontSize = 16.sp
-            ),
-            color = ModernColors.Secondary,
-            modifier = Modifier.padding(bottom = 32.dp)
+            text = "To grumble-voice chat, we need these. (He's got a brain the size of a planet, but still... permissions.)",
+            style = MaterialTheme.typography.bodyMedium,
+            color = HitchhikerColors.OnSurface,
+            modifier = Modifier.padding(bottom = 24.dp)
         )
         Card(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = ModernColors.Surface),
-            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-            shape = RoundedCornerShape(20.dp)
+            colors = CardDefaults.cardColors(containerColor = HitchhikerColors.Surface),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp), // Flat like a Babel fish
+            shape = RoundedCornerShape(8.dp)
         ) {
-            Column(modifier = Modifier.padding(24.dp)) {
+            Column(modifier = Modifier.padding(16.dp)) {
                 // Beeper Permissions Row (only if required)
                 if (requireBeeper) {
                     StatusRow(
-                        label = "Beeper permissions",
-                        status = if (permissionsGranted) "✅ Granted" else "❌ Not Granted",
-                        statusColor = if (permissionsGranted) ModernColors.Success else ModernColors.Error,
-                        buttonText = "Grant",
+                        label = "Beeper Access (For Real Chats)",
+                        status = if (permissionsGranted) "Granted (Yay!)" else "Not Yet (Sigh)",
+                        statusColor = if (permissionsGranted) HitchhikerColors.Success else HitchhikerColors.Error,
+                        buttonText = "Grant It",
                         showButton = !permissionsGranted,
                         onButtonClick = onRequestPermissions
                     )
-                    Spacer(modifier = Modifier.height(20.dp))
+                    Spacer(modifier = Modifier.height(16.dp))
                 }
                 // Microphone Permissions Row
                 StatusRow(
-                    label = "Microphone",
-                    status = if (micPermissionGranted) "✅ Granted" else "❌ Not Granted",
-                    statusColor = if (micPermissionGranted) ModernColors.Success else ModernColors.Error,
-                    buttonText = "Grant",
+                    label = "Microphone (For Marvin's Moans)",
+                    status = if (micPermissionGranted) "Granted (Finally!)" else "Not Yet (Brain Ache)",
+                    statusColor = if (micPermissionGranted) HitchhikerColors.Success else HitchhikerColors.Error,
+                    buttonText = "Grant It",
                     showButton = !micPermissionGranted,
                     onButtonClick = onRequestMic
                 )
@@ -395,32 +480,23 @@ fun PermissionStatus(
         }
         // Warning message (only if Beeper is required)
         if (requireBeeper) {
-            Spacer(modifier = Modifier.height(24.dp))
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = ModernColors.Warning.copy(alpha = 0.1f)
-                )
+            Spacer(modifier = Modifier.height(16.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(8.dp)
             ) {
-                Row(
-                    modifier = Modifier.padding(20.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "⚠️",
-                        style = MaterialTheme.typography.bodyLarge.copy(fontSize = 20.sp),
-                        modifier = Modifier.padding(end = 12.dp)
-                    )
-                    Text(
-                        text = "Ensure Beeper app is installed",
-                        style = MaterialTheme.typography.bodyMedium.copy(
-                            fontWeight = FontWeight.Medium,
-                            fontSize = 15.sp
-                        ),
-                        color = ModernColors.Warning
-                    )
-                }
+                Icon(
+                    imageVector = Icons.Default.Info,
+                    contentDescription = null,
+                    tint = HitchhikerColors.Primary,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Make sure Beeper is installed—or Marvin will just stare at the wall.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = HitchhikerColors.Primary
+                )
             }
         }
     }
@@ -442,41 +518,30 @@ fun StatusRow(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = label,
-                style = MaterialTheme.typography.titleMedium.copy(
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 18.sp
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 16.sp
                 ),
-                color = ModernColors.OnSurface
+                color = HitchhikerColors.OnSurface
             )
             Text(
                 text = status,
-                style = MaterialTheme.typography.bodyMedium.copy(
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium
-                ),
+                style = MaterialTheme.typography.bodySmall,
                 color = statusColor,
                 modifier = Modifier.padding(top = 4.dp)
             )
         }
         if (showButton) {
-            Button(
+            TextButton(
                 onClick = onButtonClick,
-                modifier = Modifier.width(100.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = ModernColors.Primary,
-                    contentColor = ModernColors.OnPrimary
-                ),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Text(
-                    buttonText,
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        fontWeight = FontWeight.SemiBold
-                    )
+                colors = ButtonDefaults.textButtonColors(
+                    contentColor = HitchhikerColors.Primary
                 )
+            ) {
+                Text(buttonText)
             }
         } else {
-            Spacer(modifier = Modifier.width(100.dp))
+            Spacer(modifier = Modifier.width(80.dp))
         }
     }
 }

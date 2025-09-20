@@ -15,13 +15,11 @@ import com.beeper.mcp.BEEPER_AUTHORITY
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-
 // Utility function for timestamp (moved here for mock to use; or keep in main if preferred)
 private fun formatTimestampInChats(timestamp: Long): String {
     val formatter = SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault())
     return formatter.format(Date(timestamp))
 }
-
 private const val TAG = "GetChatsHandler"
 fun ContentResolver.getChatsFormatted(args: Map<String, Any?>): String {
     val startTime = System.currentTimeMillis()
@@ -154,74 +152,70 @@ fun ContentResolver.getChatsFormatted(args: Map<String, Any?>): String {
         "Error retrieving chats: ${e.message}"
     }
 }
-
 // Mock version with hard-coded example data
 fun getChatsFormattedMockImpl(args: Map<String, Any?>): String {
     val limit = args["limit"]?.toString()?.toIntOrNull() ?: 100
     val offset = args["offset"]?.toString()?.toIntOrNull() ?: 0
-
     // Hard-coded example chats (ignoring filters like roomIds/protocol for mock simplicity)
     val exampleChats = listOf(
         mapOf(
-            "roomId" to "!abc123:example.com",
-            "title" to "Chat with Alice",
-            "preview" to "Hey, how's it going? Let's catch up soon!",
-            "senderEntityId" to "alice@example.com",
+            "roomId" to "!arthur_dent:heartofgold",
+            "title" to "Arthur Dent",
+            "preview" to "Marvin, stop your endless whining—we've got Vogons on our tail!",
+            "senderEntityId" to "@arthur:earth",
             "protocol" to "matrix",
-            "unreadCount" to 2,
-            "timestamp" to 1726662000000L,  // Sep 18, 2024 ~10:00 AM (adjust based on locale)
+            "unreadCount" to 3,
+            "timestamp" to 1726662000000L, // Recent
             "isOneToOne" to true,
             "isMuted" to false
         ),
         mapOf(
-            "roomId" to "!def456:example.com",
-            "title" to "Family Group",
-            "preview" to "Dinner at 7 PM?",
-            "senderEntityId" to "mom@example.com",
+            "roomId" to "!ford_prefect:galactic",
+            "title" to "Ford Prefect",
+            "preview" to "Have a Pan Galactic Gargle Blaster, Marvin—might cheer up that bucket head of yours.",
+            "senderEntityId" to "@ford:betelgeuse",
             "protocol" to "whatsapp",
-            "unreadCount" to 0,
-            "timestamp" to 1726665600000L,  // Sep 18, 2024 ~11:00 AM
-            "isOneToOne" to false,
+            "unreadCount" to 1,
+            "timestamp" to 1726665600000L,
+            "isOneToOne" to true,
             "isMuted" to true
         ),
         mapOf(
-            "roomId" to "!ghi789:example.com",
-            "title" to "Bob DM",
-            "preview" to "",
-            "senderEntityId" to "",
+            "roomId" to "!zaphod_group:improbability",
+            "title" to "Zaphod's Crew",
+            "preview" to "Crew: Shut up, Marvin! We're stealing a ship, not hosting a pity party.",
+            "senderEntityId" to "@zaphod:president",
             "protocol" to "sms",
-            "unreadCount" to 1,
-            "timestamp" to 1726669200000L,  // Sep 18, 2024 ~12:00 PM
-            "isOneToOne" to true,
-            "isMuted" to false
-        ),
-        mapOf(
-            "roomId" to "!jkl012:example.com",
-            "title" to "Work Team",
-            "preview" to "Meeting notes attached.",
-            "senderEntityId" to "boss@example.com",
-            "protocol" to "slack",
-            "unreadCount" to 5,
-            "timestamp" to 1726672800000L,  // Sep 18, 2024 ~1:00 PM
+            "unreadCount" to 2,
+            "timestamp" to 1726669200000L,
             "isOneToOne" to false,
             "isMuted" to false
         ),
         mapOf(
-            "roomId" to "!mno345:example.com",
-            "title" to "Friend Chat",
-            "preview" to "Check this out!",
-            "senderEntityId" to "friend@example.com",
+            "roomId" to "!trillian_chat:stars",
+            "title" to "Trillian",
+            "preview" to "Marvin, your diodes are aching? Try stowing away on a Vogon ship— that'll fix you.",
+            "senderEntityId" to "@trillian:earthgirl",
             "protocol" to "telegram",
             "unreadCount" to 0,
-            "timestamp" to 1726676400000L,  // Sep 18, 2024 ~2:00 PM
+            "timestamp" to 1726672800000L,
             "isOneToOne" to true,
+            "isMuted" to false
+        ),
+        mapOf(
+            "roomId" to "!vogon_poetry:disgust",
+            "title" to "Vogon Poetry Circle",
+            "preview" to "Vogons: Recite your woes, robot—we'll counter with verse that makes you long for the void.",
+            "senderEntityId" to "@vogon:prose",
+            "protocol" to "slack",
+            "unreadCount" to 4,
+            "timestamp" to 1726676400000L,
+            "isOneToOne" to false,
             "isMuted" to true
         )
     )
-
     val totalCount = exampleChats.size
     val paginatedChats = exampleChats.drop(offset).take(limit)
-
     return buildString {
         appendLine("Beeper Chats:")
         appendLine("=".repeat(50))
@@ -265,6 +259,5 @@ fun getChatsFormattedMockImpl(args: Map<String, Any?>): String {
         }
     }
 }
-
 // Extension so callers using ContentResolver.getChatsFormattedMock(...) will compile
 fun ContentResolver.getChatsFormattedMock(args: Map<String, Any?>): String = getChatsFormattedMockImpl(args)

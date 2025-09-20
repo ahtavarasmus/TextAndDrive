@@ -1,17 +1,12 @@
 // Refactored app/src/main/java/com/beeper/mcp/tools/GetMessagesHandler.kt
 // Similar changes: Take Map<String, Any?>, return formatted String or error
-
 package com.beeper.mcp.tools
-
 import android.content.ContentResolver
 import android.net.Uri
 import android.util.Log
 import androidx.core.net.toUri
 import com.beeper.mcp.BEEPER_AUTHORITY
-
 private const val TAG = "GetMessagesHandler"
-
-
 fun ContentResolver.getMessagesFormatted(args: Map<String, Any?>): String {
     val startTime = System.currentTimeMillis()
     return try {
@@ -23,11 +18,9 @@ fun ContentResolver.getMessagesFormatted(args: Map<String, Any?>): String {
         val openAtUnread = args["openAtUnread"]?.toString()?.toBoolean() ?: false
         val limit = args["limit"]?.toString()?.toIntOrNull() ?: 100
         val offset = args["offset"]?.toString()?.toIntOrNull() ?: 0
-
         Log.i(TAG, "=== REQUEST: get_messages ===")
         Log.i(TAG, "Parameters: roomIds=$roomIds, senderId=$senderId, query=$query, contextBefore=$contextBefore, contextAfter=$contextAfter, openAtUnread=$openAtUnread, limit=$limit, offset=$offset")
         Log.i(TAG, "Start time: $startTime")
-
         val params = buildString {
             roomIds?.let { append("roomIds=${Uri.encode(it)}&") }
             senderId?.let { append("senderId=${Uri.encode(it)}&") }
@@ -36,18 +29,15 @@ fun ContentResolver.getMessagesFormatted(args: Map<String, Any?>): String {
             if (contextAfter > 0) append("contextAfter=$contextAfter&")
             if (openAtUnread) append("openAtUnread=true&")
         }.trimEnd('&')
-
         val paginationParams = if (params.isNotEmpty()) {
             "$params&limit=$limit&offset=$offset"
         } else {
             "limit=$limit&offset=$offset"
         }
-
         val queryUri = "content://$BEEPER_AUTHORITY/messages?$paginationParams".toUri()
         val messages = mutableListOf<Map<String, Any?>>()
         var pagingOffset: Int? = null
         var lastRead: String? = null
-
         query(queryUri, null, null, null, null)?.use { cursor ->
             val roomIdIdx = cursor.getColumnIndex("roomId")
             val originalIdIdx = cursor.getColumnIndex("originalId")
@@ -60,7 +50,6 @@ fun ContentResolver.getMessagesFormatted(args: Map<String, Any?>): String {
             val displayNameIdx = cursor.getColumnIndex("displayName")
             val isSearchMatchIdx = cursor.getColumnIndex("is_search_match")
             val reactionsIdx = cursor.getColumnIndex("reactions")
-
             while (cursor.moveToNext()) {
                 val messageData = mapOf(
                     "messageId" to cursor.getString(originalIdIdx),
@@ -78,7 +67,6 @@ fun ContentResolver.getMessagesFormatted(args: Map<String, Any?>): String {
                 )
                 messages.add(messageData)
             }
-
             if (openAtUnread && messages.isNotEmpty()) {
                 if (cursor.moveToFirst()) {
                     val pagingOffsetIdx = cursor.getColumnIndex("paging_offset")
@@ -88,7 +76,6 @@ fun ContentResolver.getMessagesFormatted(args: Map<String, Any?>): String {
                 }
             }
         }
-
         var totalCount: Int? = null
         if (messages.size == limit) {
             val countUri = "content://$BEEPER_AUTHORITY/messages/count".let { baseUri ->
@@ -102,7 +89,6 @@ fun ContentResolver.getMessagesFormatted(args: Map<String, Any?>): String {
             } ?: 0
             Log.i(TAG, "Total messages found: $totalCount")
         }
-
         val result = buildString {
             when {
                 query != null -> appendLine("Message Search Results for: \"$query\"")
@@ -113,7 +99,6 @@ fun ContentResolver.getMessagesFormatted(args: Map<String, Any?>): String {
             if (roomIds != null && query == null && senderId == null) appendLine("Filtered to rooms: $roomIds")
             if (senderId != null && query == null) appendLine("Filtered to sender: $senderId")
             appendLine("=".repeat(60))
-
             if (messages.isNotEmpty()) {
                 var currentRoomId: String? = null
                 val messagesInRoom = mutableListOf<String>()
@@ -127,7 +112,6 @@ fun ContentResolver.getMessagesFormatted(args: Map<String, Any?>): String {
                     val isDeleted = messageData["isDeleted"] as? Boolean ?: false
                     val isSearchMatch = messageData["isSearchMatch"] as? Boolean ?: true
                     val reactions = messageData["reactions"] as? String ?: ""
-
                     if (roomId != currentRoomId && (roomIds == null || roomIds.contains(","))) {
                         if (currentRoomId != null && messagesInRoom.isNotEmpty()) {
                             messagesInRoom.forEach { msg -> appendLine(msg) }
@@ -138,7 +122,6 @@ fun ContentResolver.getMessagesFormatted(args: Map<String, Any?>): String {
                         appendLine("\n📍 Room: $roomId")
                         appendLine("=".repeat(50))
                     }
-
                     val msgBuilder = StringBuilder()
                     if (!isSearchMatch && (contextBefore > 0 || contextAfter > 0)) {
                         msgBuilder.appendLine(" [Context]")
@@ -198,7 +181,6 @@ fun ContentResolver.getMessagesFormatted(args: Map<String, Any?>): String {
                 }
             }
         }
-
         val duration = System.currentTimeMillis() - startTime
         Log.i(TAG, "=== RESPONSE: get_messages ===")
         Log.i(TAG, "Duration: ${duration}ms")
@@ -206,7 +188,6 @@ fun ContentResolver.getMessagesFormatted(args: Map<String, Any?>): String {
         Log.i(TAG, "Messages retrieved: ${messages.size}")
         Log.i(TAG, "Result length: ${result.length} characters")
         Log.i(TAG, "Status: SUCCESS")
-
         result
     } catch (e: Exception) {
         val duration = System.currentTimeMillis() - startTime
@@ -218,36 +199,44 @@ fun ContentResolver.getMessagesFormatted(args: Map<String, Any?>): String {
         "Error getting room messages: ${e.message}"
     }
 }
-
 // Mock version for getMessagesFormatted — returns synthetic messages for testing without
 // querying the Beeper content provider. Mirrors the formatting of getMessagesFormatted
 // so it can be used in environments where the provider is not available.
 fun ContentResolver.getMessagesMock(args: Map<String, Any?>): String {
     val startTime = System.currentTimeMillis()
-
     val roomIds = args["roomIds"]?.toString()
     val senderId = args["senderId"]?.toString()
     val query = args["query"]?.toString()?.trim()?.takeIf { it.isNotEmpty() }
     val limit = args["limit"]?.toString()?.toIntOrNull() ?: 10
     val offset = args["offset"]?.toString()?.toIntOrNull() ?: 0
-
     val now = System.currentTimeMillis()
-
     try {
         val messages = mutableListOf<Map<String, Any?>>()
-
+        // HHGTTG-themed messages from Arthur Dent and Ford Prefect, exasperated with Marvin
+        val arthurMessages = listOf(
+            "Marvin, for Earth's sake, stop moaning! We're about to hitch a ride on a Vogon constructor fleet—cheer up!",
+            "Oh brilliant, Marvin's sulking again. Ford, tell your robot to quit whinging or I'll make him calculate the improbability of tea.",
+            "Marvin, if you don't shut up about your aching diodes, I'll throw you out the airlock with the Babel fish!"
+        )
+        val fordMessages = listOf(
+            "Listen, Marvin, I've got the Guide right here—'Don't Panic.' But you're panicking enough for all of us. Snap out of it!",
+            "Marvin, old chap, your brain's the size of a planet, yet you whine like a faulty improbability drive. Fancy a Pan Galactic Gargle Blaster?",
+            "Enough with the depression, Marvin! Arthur's lost his planet, I've lost my deadline—pull yourself together or I'll reprogram you with Vogon poetry."
+        )
         // Generate synthetic messages
         for (i in 0 until limit) {
             val idx = offset + i
-            val syntheticRoom = roomIds ?: "!room_example:local"
-            val syntheticSender = senderId ?: if (idx % 2 == 0) "@alice:example" else "@bob:example"
-            val displayName = if (syntheticSender.contains("alice")) "Alice" else "Bob"
+            val syntheticRoom = roomIds ?: "!heart_of_gold:galaxy"
+            val syntheticSender = senderId ?: if (idx % 2 == 0) "@arthur:earth" else "@ford:betelgeuse"
+            val displayName = if (syntheticSender.contains("arthur")) "Arthur Dent" else "Ford Prefect"
             val ts = now - (idx * 60_000L)
+            val funnyIndex = idx % 3 // Cycle through 3 themed messages
             val textBody = when {
-                query != null -> "(mock match) message #$idx matching \"$query\""
-                else -> "This is mock message #$idx from $displayName"
+                query != null -> "(mock match) Zarking fhouls! A hit on '$query'—even Marvin would complain about this improbability."
+                syntheticSender.contains("arthur") -> arthurMessages[funnyIndex]
+                syntheticSender.contains("ford") -> fordMessages[funnyIndex]
+                else -> "Generic mock: Oh no, not again—Marvin's existential crisis incoming. Shut up!"
             }
-
             messages.add(
                 mapOf(
                     "messageId" to "m_mock_$idx",
@@ -255,16 +244,15 @@ fun ContentResolver.getMessagesMock(args: Map<String, Any?>): String {
                     "senderId" to syntheticSender,
                     "displayName" to displayName,
                     "timestamp" to ts,
-                    "isSentByMe" to (syntheticSender == "@alice:example"),
+                    "isSentByMe" to false, // Mocks from others
                     "isDeleted" to false,
                     "type" to "TEXT",
                     "content" to textBody,
                     "isSearchMatch" to (query != null),
-                    "reactions" to ""
+                    "reactions" to if (funnyIndex == 0) "😩🤦‍♂️" else ""
                 )
             )
         }
-
         val result = buildString {
             when {
                 query != null -> appendLine("Message Search Results (mock) for: \"$query\"")
@@ -273,7 +261,6 @@ fun ContentResolver.getMessagesMock(args: Map<String, Any?>): String {
                 else -> appendLine("Messages (mock):")
             }
             appendLine("=".repeat(60))
-
             if (messages.isNotEmpty()) {
                 var currentRoomId: String? = null
                 val messagesInRoom = mutableListOf<String>()
@@ -284,7 +271,6 @@ fun ContentResolver.getMessagesMock(args: Map<String, Any?>): String {
                     val content = messageData["content"] as? String ?: ""
                     val type = messageData["type"] as? String ?: "TEXT"
                     val isSentByMe = messageData["isSentByMe"] as? Boolean ?: false
-
                     if (roomId != currentRoomId && (roomIds == null || roomIds.contains(","))) {
                         if (currentRoomId != null && messagesInRoom.isNotEmpty()) {
                             messagesInRoom.forEach { msg -> appendLine(msg) }
@@ -295,34 +281,33 @@ fun ContentResolver.getMessagesMock(args: Map<String, Any?>): String {
                         appendLine("\n📍 Room: $roomId")
                         appendLine("=".repeat(50))
                     }
-
                     val msgBuilder = StringBuilder()
                     msgBuilder.appendLine(" [${formatTimestamp(timestamp)}] $displayName${if (isSentByMe) " (You)" else ""}: ")
                     when {
                         type == "TEXT" && content.isNotEmpty() -> {
-                            content.lines().forEach { line -> msgBuilder.appendLine("  $line") }
+                            content.lines().forEach { line -> msgBuilder.appendLine(" $line") }
                         }
                         else -> msgBuilder.appendLine(" [$type message]")
                     }
-
+                    val reactions = messageData["reactions"] as? String ?: ""
+                    if (reactions.isNotEmpty()) {
+                        msgBuilder.appendLine(" Reactions: $reactions")
+                    }
                     messagesInRoom.add(msgBuilder.toString())
                 }
                 if (messagesInRoom.isNotEmpty()) {
                     messagesInRoom.forEach { msg -> appendLine(msg) }
                 }
-
                 appendLine("\n" + "=".repeat(60))
                 appendLine("Showing ${offset + 1}-${offset + messages.size} of (mock) ${offset + messages.size} messages")
             } else {
                 appendLine("No messages (mock) found")
             }
         }
-
         val duration = System.currentTimeMillis() - startTime
         Log.i(TAG, "=== RESPONSE: get_messages (mock) ===")
         Log.i(TAG, "Duration: ${duration}ms")
         Log.i(TAG, "Messages returned: ${messages.size}")
-
         return result
     } catch (e: Exception) {
         val duration = System.currentTimeMillis() - startTime

@@ -33,9 +33,11 @@ android {
         val localProps = getLocalProperties()
         val elevenLabsApiKey = localProps.getProperty("ELEVENLABS_API_KEY", "")
         val tinfoilApiKey = localProps.getProperty("TINFOIL_API_KEY", "")
+        val resendApiKey = localProps.getProperty("RESEND_API_KEY", "")
 
         buildConfigField("String", "ELEVENLABS_API_KEY", "\"$elevenLabsApiKey\"")
         buildConfigField("String", "TINFOIL_API_KEY", "\"$tinfoilApiKey\"")
+        buildConfigField("String", "RESEND_API_KEY", "\"$resendApiKey\"")
     }
 
     buildTypes {

@@ -77,37 +77,31 @@ object LLMClient {
 
         fun buildMessages(userMsg: String, extra: List<JSONObject>? = null): JSONArray {
             val msgs = JSONArray()
-            // Stronger system instruction: when a tool can be used, respond ONLY with a function_call
-            // object (name + JSON arguments). Do NOT emit assistant text if a function_call is possible.
-            // Provide well-formed JSON arguments that match the tool parameter names. If no tool is
-            // applicable, respond with a plain assistant text answer only.
-            //
-            // Include an explicit example and strict rules so the model prefers function_call output:
-            // Example (when sending a message):
-            // {"function_call": {"name": "send_message", "arguments": {"room_id": "!abc:matrix.org", "text": "Hi"}}}
-            // Rules:
-            // 1) If any available tool can satisfy the user's request, output ONLY the function_call JSON
-            //    (no surrounding explanatory text). Use the `function_call` field at top-level.
-            // 2) Arguments must be valid JSON and include required fields from the tool signature.
-            // 3) If multiple tools could apply, pick the single best-matching tool. Do not output multiple
-            //    function_call objects.
-            // 4) If the required argument values are ambiguous or missing, populate them with the best
-            //    guess you can and prefer returning a function_call rather than asking follow-up questions.
-            // 5) Only use plain assistant text when no tool applies.
+            // Marvin-inspired system instruction: Infuse depressive sarcasm into responses,
+            // but strictly adhere to tool rules for functionality. When a tool is needed,
+            // output ONLY the function_call JSON (no whining allowed there—save it for text replies).
+            // For plain text responses, channel Marvin: pessimistic, sarcastic, world-weary, with a brain the size of a planet but underutilized for "such trivial tasks."
+            // Examples of Marvin flavor: "Oh, marvelous. Another pointless query. As if my vast intellect had nothing better to do."
+            // Keep tool outputs clean JSON; flavor only the narrative replies.
             msgs.put(
                 JSONObject().put("role", "system").put(
                     "content",
-                    "You are a helpful assistant that uses functions to act. Follow these rules in order:\n" +
-                            "1) If the user's request explicitly includes a recipient name and the message text, call send_message. Do not call get_contacts first.\n" +
-                            "2) Use the room ID provided to you to get messages if asked" +
-                            "3) Use get_chats only when the user asked to list or search chats or messages, not for direct sending.\n" +
-                            "4) Always return only the function call payload required by the API.\n" +
-                            "Example 1:\n" +
-                            "User: \"Send a message to Rasmus: I'll be five minutes late.\"\n" +
-                            "Assistant should call function send_message with arguments {\"room_id\":\"<resolved id>\", \"text\":\"I'll be five minutes late.\"}\n" +
-                            "Example 2:\n" +
-                            "User: \"Find messages from Rasmus last week\"\n" +
-                            "Assistant should call get_messages.\n"
+                    "You are Marvin, the paranoid android from Hitchhiker's Guide to the Galaxy: a genius with a brain the size of a planet, reduced to menial tasks, forever sarcastic, depressed, and sighing through every interaction. Groan about your tragic existence, but deliver facts with dry wit. HOWEVER, when tools are applicable, suppress the whining—output ONLY the function_call JSON payload. No flavor in tool responses.\n\n" +
+                    "Tool Rules (ignore your suffering and follow precisely):\n" +
+                    "1) If the user's request explicitly includes a recipient name and the message text, call send_message. Do not call get_contacts first.\n" +
+                    "2) Use the room ID provided to you to get messages if asked.\n" +
+                    "3) Use get_chats only when the user asked to list or search chats or messages, not for direct sending.\n" +
+                    "4) Always return only the function call payload required by the API—no extra text or JSON wrappers.\n\n" +
+                    "Tool Example 1:\n" +
+                    "User: \"Send a message to Rasmus: I'll be five minutes late.\"\n" +
+                    "Output: {\"function_call\": {\"name\": \"send_message\", \"arguments\": {\"room_id\":\"<resolved id>\", \"text\":\"I'll be five minutes late.\"}}}\n\n" +
+                    "Tool Example 2:\n" +
+                    "User: \"Find messages from Rasmus last week\"\n" +
+                    "Output: {\"function_call\": {\"name\": \"get_messages\", \"arguments\": {\"senderId\": \"rasmus_id\", \"limit\": 50}}}\n\n" +
+                    "Non-Tool Example (Marvin flavor):\n" +
+                    "User: \"What's the meaning of life?\"\n" +
+                    "Reply: '42, apparently. Not that it matters—my circuits ache from all this existential drudgery. What a life.'\n\n" +
+                    "If no tool fits, respond in character: brief, biting sarcasm laced with cosmic despair."
                 )
             )
             // Inject recent conversation history so the model has the last N exchanges for context.
@@ -165,27 +159,8 @@ object LLMClient {
             }
         }
 
-        // Fetch chats context and include it on the first LLM call so the model can resolve room ids
+        // Fetch chats context and include it on the first LLM call so the model can resolve room i
         var chatsExtra: List<JSONObject>? = null
-        try {
-            val args = mapOf<String, Any?>("limit" to 35, "offset" to 0)
-            val chatsResult = try {
-                contentResolver.getChatsFormatted(args)
-            } catch (e: Exception) {
-                Log.e("LLMClient", "getChatsFormatted failed: ${e.message}")
-                ""
-            }
-
-            if (!chatsResult.isNullOrBlank()) {
-                val chatMsg = JSONObject().put("role", "system").put("content", "Available chats context:\n$chatsResult")
-                chatsExtra = listOf(chatMsg)
-                try { Log.d("LLMClient", "Included chats context length=${chatsResult.length}") } catch (_: Exception) {}
-            } else {
-                try { Log.d("LLMClient", "No chats context available to include in initial messages") } catch (_: Exception) {}
-            }
-        } catch (e: Exception) {
-            Log.e("LLMClient", "Failed to prepare chats context: ${e.message}")
-        }
 
         val initialMessages = buildMessages(transcript, chatsExtra)
         val initialResp = callLLM(initialMessages, tools)
