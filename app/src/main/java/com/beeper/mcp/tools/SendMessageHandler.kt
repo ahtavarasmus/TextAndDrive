@@ -71,3 +71,52 @@ fun ContentResolver.sendHardcodedMessageToRasums(): String {
     )
     return sendMessageFormatted(args)
 }
+
+// Mock version for sendMessageFormatted — simulates sending a message and returns
+// the same formatted success/failure strings without calling the ContentProvider.
+fun ContentResolver.sendMessageMock(args: Map<String, Any?>): String {
+    val startTime = System.currentTimeMillis()
+    return try {
+        val roomId = args["room_id"]?.toString()
+        val text = args["text"]?.toString()
+        val simulateFailure = args["simulate_failure"]?.toString()?.toBoolean() ?: false
+
+        if (roomId == null || text == null) {
+            return "Error: Both 'room_id' and 'text' parameters are required".also {
+                Log.e(TAG, "=== ERROR (mock): send_message ===")
+                Log.e(TAG, "Error: Missing required parameters - need both room_id and text")
+            }
+        }
+
+        Log.i(TAG, "=== REQUEST (mock): send_message ===")
+        Log.i(TAG, "Parameters: roomId=$roomId, text length=${text.length}, simulateFailure=$simulateFailure")
+        Log.i(TAG, "Start time: $startTime")
+
+        // Simulate a short delay to mimic real operation
+        Thread.sleep(50)
+
+        val success = !simulateFailure
+        val responseText = if (success) {
+            "Message sent successfully to room: $roomId\n\nMessage content: $text"
+        } else {
+            "Failed to send message to room: $roomId\n\nThis is a simulated failure (simulate_failure=true)"
+        }
+
+        val duration = System.currentTimeMillis() - startTime
+        Log.i(TAG, "=== RESPONSE (mock): send_message ===")
+        Log.i(TAG, "Duration: ${duration}ms")
+        Log.i(TAG, "Success: $success")
+        Log.i(TAG, "Status: ${if (success) "SUCCESS" else "FAILED"}")
+
+        responseText
+
+    } catch (e: Exception) {
+        val duration = System.currentTimeMillis() - startTime
+        Log.e(TAG, "=== ERROR (mock): send_message ===")
+        Log.e(TAG, "Duration: ${duration}ms")
+        Log.e(TAG, "Error: ${e.message}")
+        Log.e(TAG, "Exception type: ${e.javaClass.simpleName}")
+        Log.e(TAG, "Stack trace:", e)
+        "Error (mock) sending message: ${e.message}"
+    }
+}

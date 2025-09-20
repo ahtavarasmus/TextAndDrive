@@ -218,3 +218,117 @@ fun ContentResolver.getMessagesFormatted(args: Map<String, Any?>): String {
         "Error getting room messages: ${e.message}"
     }
 }
+
+// Mock version for getMessagesFormatted — returns synthetic messages for testing without
+// querying the Beeper content provider. Mirrors the formatting of getMessagesFormatted
+// so it can be used in environments where the provider is not available.
+fun ContentResolver.getMessagesMock(args: Map<String, Any?>): String {
+    val startTime = System.currentTimeMillis()
+
+    val roomIds = args["roomIds"]?.toString()
+    val senderId = args["senderId"]?.toString()
+    val query = args["query"]?.toString()?.trim()?.takeIf { it.isNotEmpty() }
+    val limit = args["limit"]?.toString()?.toIntOrNull() ?: 10
+    val offset = args["offset"]?.toString()?.toIntOrNull() ?: 0
+
+    val now = System.currentTimeMillis()
+
+    try {
+        val messages = mutableListOf<Map<String, Any?>>()
+
+        // Generate synthetic messages
+        for (i in 0 until limit) {
+            val idx = offset + i
+            val syntheticRoom = roomIds ?: "!room_example:local"
+            val syntheticSender = senderId ?: if (idx % 2 == 0) "@alice:example" else "@bob:example"
+            val displayName = if (syntheticSender.contains("alice")) "Alice" else "Bob"
+            val ts = now - (idx * 60_000L)
+            val textBody = when {
+                query != null -> "(mock match) message #$idx matching \"$query\""
+                else -> "This is mock message #$idx from $displayName"
+            }
+
+            messages.add(
+                mapOf(
+                    "messageId" to "m_mock_$idx",
+                    "roomId" to syntheticRoom,
+                    "senderId" to syntheticSender,
+                    "displayName" to displayName,
+                    "timestamp" to ts,
+                    "isSentByMe" to (syntheticSender == "@alice:example"),
+                    "isDeleted" to false,
+                    "type" to "TEXT",
+                    "content" to textBody,
+                    "isSearchMatch" to (query != null),
+                    "reactions" to ""
+                )
+            )
+        }
+
+        val result = buildString {
+            when {
+                query != null -> appendLine("Message Search Results (mock) for: \"$query\"")
+                roomIds != null -> appendLine("Messages (mock) in Rooms: $roomIds")
+                senderId != null -> appendLine("Messages (mock) from Sender: $senderId")
+                else -> appendLine("Messages (mock):")
+            }
+            appendLine("=".repeat(60))
+
+            if (messages.isNotEmpty()) {
+                var currentRoomId: String? = null
+                val messagesInRoom = mutableListOf<String>()
+                messages.forEach { messageData ->
+                    val roomId = messageData["roomId"] as? String ?: "unknown"
+                    val displayName = messageData["displayName"] as? String ?: "Unknown"
+                    val timestamp = messageData["timestamp"] as? Long ?: 0L
+                    val content = messageData["content"] as? String ?: ""
+                    val type = messageData["type"] as? String ?: "TEXT"
+                    val isSentByMe = messageData["isSentByMe"] as? Boolean ?: false
+
+                    if (roomId != currentRoomId && (roomIds == null || roomIds.contains(","))) {
+                        if (currentRoomId != null && messagesInRoom.isNotEmpty()) {
+                            messagesInRoom.forEach { msg -> appendLine(msg) }
+                            appendLine()
+                        }
+                        currentRoomId = roomId
+                        messagesInRoom.clear()
+                        appendLine("\n📍 Room: $roomId")
+                        appendLine("=".repeat(50))
+                    }
+
+                    val msgBuilder = StringBuilder()
+                    msgBuilder.appendLine(" [${formatTimestamp(timestamp)}] $displayName${if (isSentByMe) " (You)" else ""}: ")
+                    when {
+                        type == "TEXT" && content.isNotEmpty() -> {
+                            content.lines().forEach { line -> msgBuilder.appendLine("  $line") }
+                        }
+                        else -> msgBuilder.appendLine(" [$type message]")
+                    }
+
+                    messagesInRoom.add(msgBuilder.toString())
+                }
+                if (messagesInRoom.isNotEmpty()) {
+                    messagesInRoom.forEach { msg -> appendLine(msg) }
+                }
+
+                appendLine("\n" + "=".repeat(60))
+                appendLine("Showing ${offset + 1}-${offset + messages.size} of (mock) ${offset + messages.size} messages")
+            } else {
+                appendLine("No messages (mock) found")
+            }
+        }
+
+        val duration = System.currentTimeMillis() - startTime
+        Log.i(TAG, "=== RESPONSE: get_messages (mock) ===")
+        Log.i(TAG, "Duration: ${duration}ms")
+        Log.i(TAG, "Messages returned: ${messages.size}")
+
+        return result
+    } catch (e: Exception) {
+        val duration = System.currentTimeMillis() - startTime
+        Log.e(TAG, "=== ERROR: get_messages (mock) ===")
+        Log.e(TAG, "Duration: ${duration}ms")
+        Log.e(TAG, "Error: ${e.message}")
+        return "Error generating mock messages: ${e.message}"
+    }
+}

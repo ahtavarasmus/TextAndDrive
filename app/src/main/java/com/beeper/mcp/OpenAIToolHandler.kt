@@ -3,6 +3,7 @@ package com.beeper.mcp
 import android.content.ContentResolver
 import android.content.ContentValues
 import android.net.Uri
+import android.util.Log
 import androidx.core.net.toUri
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -15,6 +16,8 @@ import com.beeper.mcp.tools.getContactsFormatted
 import com.beeper.mcp.tools.getMessagesFormatted
 import com.beeper.mcp.tools.sendMessageFormatted
 import com.beeper.mcp.tools.getChatsFormattedMock  // Add this import for the mock version
+import com.beeper.mcp.tools.getMessagesMock
+import com.beeper.mcp.tools.sendMessageMock
 import kotlinx.coroutines.withContext
 
 // Extension to convert JSONObject to Map<String, Any?>
@@ -149,6 +152,7 @@ suspend fun ContentResolver.handleOpenAIToolCall(toolCall: Map<String, Any>): St
     }
 }
 
+
 // Duplicate suspend function for mocking - switches easily by renaming or calling this instead.
 // For "get_chats", it uses the mock version with hard-coded data; others remain actual.
 suspend fun ContentResolver.handleOpenAIToolCallMock(toolCall: Map<String, Any>): String = withContext(Dispatchers.IO) {
@@ -156,12 +160,13 @@ suspend fun ContentResolver.handleOpenAIToolCallMock(toolCall: Map<String, Any>)
     val argsJson = toolCall["arguments"] as? String ?: return@withContext "Error: Invalid arguments"
     val argsObj = JSONObject(argsJson)
     val argsMap = argsObj.toMap()
+    Log.d("CALLED", "HELLO")
 
     when (functionName) {
         "get_chats" -> getChatsFormattedMock(argsMap)  // Use mock with hard-coded example data
         "get_contacts" -> getContactsFormatted(argsMap)
-        "get_messages" -> getMessagesFormatted(argsMap)
-        "send_message" -> sendMessageFormatted(argsMap)
+        "get_messages" -> getMessagesMock(argsMap)
+        "send_message" -> sendMessageMock(argsMap)
         else -> "Error: Unknown tool $functionName"
     }
 }

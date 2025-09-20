@@ -156,7 +156,7 @@ fun ContentResolver.getChatsFormatted(args: Map<String, Any?>): String {
 }
 
 // Mock version with hard-coded example data
-fun getChatsFormattedMock(args: Map<String, Any?>): String {
+fun getChatsFormattedMockImpl(args: Map<String, Any?>): String {
     val limit = args["limit"]?.toString()?.toIntOrNull() ?: 100
     val offset = args["offset"]?.toString()?.toIntOrNull() ?: 0
 
@@ -244,7 +244,7 @@ fun getChatsFormattedMock(args: Map<String, Any?>): String {
                 appendLine(" Network: ${protocol.ifEmpty { "beeper" }}")
                 appendLine(" Unread: $unreadCount messages")
                 appendLine(" Muted: ${if (isMuted) "Yes" else "No"}")
-                appendLine(" Last Activity: ${formatTimestamp(timestamp)}")
+                appendLine(" Last Activity: ${formatTimestampInChats(timestamp)}")
                 if (preview.isNotEmpty()) {
                     appendLine(" Preview: ${preview.take(100)}${if (preview.length > 100) "..." else ""}")
                     if (senderEntityId.isNotEmpty()) {
@@ -265,3 +265,6 @@ fun getChatsFormattedMock(args: Map<String, Any?>): String {
         }
     }
 }
+
+// Extension so callers using ContentResolver.getChatsFormattedMock(...) will compile
+fun ContentResolver.getChatsFormattedMock(args: Map<String, Any?>): String = getChatsFormattedMockImpl(args)
