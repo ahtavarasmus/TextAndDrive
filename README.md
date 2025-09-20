@@ -38,6 +38,11 @@ Demo mode uses mock chats; real mode accesses your Beeper data.
 - **Modes**: Demo (Marvin's chats mock data) vs. Real (your chats).
 - **Privacy**: On-device Beeper access (use Beeper's on-device chats for full e2ee); Transcription and LLM processing happen without third party. For full verifiability, add Tinfoil TTS + pre-call verifier (for zero trust privacy).
 
+![2025-09-21 02 18 50](https://github.com/user-attachments/assets/7757eb51-d560-4107-a5d7-dbd31f4259cd)
+![2025-09-21 02 18 45](https://github.com/user-attachments/assets/f01154b3-269a-48b3-9d7a-7c97b5189752)
+![2025-09-21 02 18 31](https://github.com/user-attachments/assets/12f6e774-dcc2-42a2-b4db-1c3e6d644492)
+
+
 ## Important Notes
 - **Safety**: Hands-free only—test safely, obey laws. Only recommended to be used while driving cars inside video games.
 
