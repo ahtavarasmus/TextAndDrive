@@ -87,7 +87,7 @@ fun AudioRecordScreen(modifier: Modifier = Modifier) {
 
                         // Create args map with default parameters
                         val args = mapOf<String, Any?>(
-                            "limit" to 20, // Get more chats for better context
+                            "limit" to 35, // Get more chats for better context
                             "offset" to 0
                         )
                         val chatsResult = context.contentResolver.getChatsFormatted(args)

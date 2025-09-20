@@ -13,6 +13,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 import com.beeper.mcp.handleOpenAIToolCall
+import com.beeper.mcp.tools.getChatsFormatted
 
 object LLMClient {
     private val client = OkHttpClient.Builder()
@@ -96,9 +97,9 @@ object LLMClient {
             msgs.put(
                 JSONObject().put("role", "system").put(
                     "content",
-                    "You are a helpful assistant that uses functions to act. DO NOT CALL get_contacts tool ever. Follow these rules in order:\n" +
+                    "You are a helpful assistant that uses functions to act. Follow these rules in order:\n" +
                             "1) If the user's request explicitly includes a recipient name and the message text, call send_message. Do not call get_contacts first.\n" +
-                            "2) If the user's request names a recipient but you cannot be sure which contact is intended, call get_contacts with {\"query\":\"<recipient name>\"} to resolve. If get_contacts returns a single match, call send_message with that match's room_id. If get_contacts returns multiple matches, ask the user a clarifying question.\n" +
+                            "2) Use the room ID provided to you to get messages if asked" +
                             "3) Use get_chats only when the user asked to list or search chats or messages, not for direct sending.\n" +
                             "4) Always return only the function call payload required by the API.\n" +
                             "Example 1:\n" +
@@ -164,7 +165,29 @@ object LLMClient {
             }
         }
 
-        val initialMessages = buildMessages(transcript)
+        // Fetch chats context and include it on the first LLM call so the model can resolve room ids
+        var chatsExtra: List<JSONObject>? = null
+        try {
+            val args = mapOf<String, Any?>("limit" to 35, "offset" to 0)
+            val chatsResult = try {
+                contentResolver.getChatsFormatted(args)
+            } catch (e: Exception) {
+                Log.e("LLMClient", "getChatsFormatted failed: ${e.message}")
+                ""
+            }
+
+            if (!chatsResult.isNullOrBlank()) {
+                val chatMsg = JSONObject().put("role", "system").put("content", "Available chats context:\n$chatsResult")
+                chatsExtra = listOf(chatMsg)
+                try { Log.d("LLMClient", "Included chats context length=${chatsResult.length}") } catch (_: Exception) {}
+            } else {
+                try { Log.d("LLMClient", "No chats context available to include in initial messages") } catch (_: Exception) {}
+            }
+        } catch (e: Exception) {
+            Log.e("LLMClient", "Failed to prepare chats context: ${e.message}")
+        }
+
+        val initialMessages = buildMessages(transcript, chatsExtra)
         val initialResp = callLLM(initialMessages, tools)
         val choice = initialResp.getJSONArray("choices").getJSONObject(0)
         val message = choice.getJSONObject("message")

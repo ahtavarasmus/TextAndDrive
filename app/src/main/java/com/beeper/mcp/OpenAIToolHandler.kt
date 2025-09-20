@@ -75,25 +75,25 @@ fun getOpenAITools(): List<Map<String, Any>> {
                 )
             )
         ),
-        mapOf(
-            "type" to "function",
-            "function" to mapOf(
-                "name" to "get_contacts",
-                "description" to "Retrieves contacts/senders with optional filtering.",
-                "parameters" to mapOf(
-                    "type" to "object",
-                    "properties" to mapOf(
-                        "senderIds" to mapOf("type" to "string", "description" to "Optional comma-separated sender IDs"),
-                        "roomIds" to mapOf("type" to "string", "description" to "Optional comma-separated room IDs"),
-                        "query" to mapOf("type" to "string", "description" to "Optional full-text search"),
-                        "protocol" to mapOf("type" to "string", "description" to "Optional network filter"),
-                        "limit" to mapOf("type" to "integer", "description" to "Default 100"),
-                        "offset" to mapOf("type" to "integer", "description" to "Default 0")
-                    ),
-                    "required" to emptyList<String>()
-                )
-            )
-        ),
+//        mapOf(
+//            "type" to "function",
+//            "function" to mapOf(
+//                "name" to "get_contacts",
+//                "description" to "Retrieves contacts/senders with optional filtering.",
+//                "parameters" to mapOf(
+//                    "type" to "object",
+//                    "properties" to mapOf(
+//                        "senderIds" to mapOf("type" to "string", "description" to "Optional comma-separated sender IDs"),
+//                        "roomIds" to mapOf("type" to "string", "description" to "Optional comma-separated room IDs"),
+//                        "query" to mapOf("type" to "string", "description" to "Optional full-text search"),
+//                        "protocol" to mapOf("type" to "string", "description" to "Optional network filter"),
+//                        "limit" to mapOf("type" to "integer", "description" to "Default 100"),
+//                        "offset" to mapOf("type" to "integer", "description" to "Default 0")
+//                    ),
+//                    "required" to emptyList<String>()
+//                )
+//            )
+//        ),
         mapOf(
             "type" to "function",
             "function" to mapOf(
