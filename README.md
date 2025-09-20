@@ -1,67 +1,45 @@
-# TextAndDrive
+**TextAndDrive** is an Android app for voice-based messaging while driving or multitasking. It integrates with Beeper on-device to let you speak commands to send texts across apps like WhatsApp and iMessage, with incoming messages read aloud. Powered by AI with Marvin's sarcastic personality from *The Hitchhiker's Guide to the Galaxy*, it processes natural voice inputs securely with a private LLM and with few tweaks can be made zero trust private.
 
-An Android app that allows voice chatting with your chat apps while driving without having to look at the phone screen. It integrates with Beeper to enable hands-free messaging: speak to send messages, and have incoming messages read aloud via text-to-speech.
+Built for the [Junction 2025 AI Agent Hackathon](https://www.hackjunction.com/).
 
-[final.webm](https://github.com/user-attachments/assets/4b20871c-4e7f-4573-b501-079c679d7fd8)
+![Demo Video](https://github.com/user-attachments/assets/4b20871c-4e7f-4573-b501-079c679d7fd8)  
+*(Hold screen to speak, release to process—Marvin confirms the action.)*
 
+## How It Works
+1. **Record**: Press and hold *anywhere* on the screen to capture voice via microphone.
+2. **Process**: Release to transcribe (Tinfoil STT), analyze intent (Tinfoil LLM with Beeper tools), and act (e.g., send message).
+3. **Respond**: Wait for TTS confirmation or message readout.
+
+Demo mode uses mock chats; real mode accesses your Beeper data.
 
 ## Prerequisites
-
-- **Android device** with Beeper Android app installed
-- **Same device requirement**: This app must be installed on the same Android device as Beeper
-- Android 8.0 (API level 26) or higher
-- Android Studio or build tools for compilation
+- Android 8.0+ device with [Beeper](https://www.beeper.com/) installed (same device required).
+- [ElevenLabs](https://elevenlabs.io/) and [Tinfoil](https://tinfoil.sh/) API keys.
+- Android Studio or Gradle for building.
 
 ## Build and Installation
-
-### 1. Clone the Repository
-```bash
-git clone https://github.com/ahtavarasmus/TextAndDrive.git
-cd TextAndDrive
-```
-
-### 2. Connect Your Device
-1. Connect your Android device via USB
-2. Enable **Developer Options** and **USB Debugging**
-
-### 3. Build and Install
-
-#### Add 11Labs api key to root local.properties
-```
-ELEVENLABS_API_KEY=
-```
-
-#### Option A: Command Line
-```bash
-./gradlew installDebug
-```
-
-#### Option B: Android Studio
-1. Open the project in Android Studio
-2. Sync project with Gradle files
-3. Run the app: **Run → Run 'app'**
+1. Clone: `git clone https://github.com/ahtavarasmus/TextAndDrive.git && cd TextAndDrive`
+2. Connect device (USB Debugging on).
+3. Add keys to `local.properties`:
+   ```
+   ELEVENLABS_API_KEY=your_key
+   TINFOIL_API_KEY=your_key
+   ```
+4. Build: `./gradlew installDebug` (CLI) or Run in Android Studio.
 
 ## Setup and Usage
-
-### 1. Grant Permissions
-After installation, open the TextAndDrive app and:
-- Grant **Beeper permissions** (read/send access)
-- Grant **Microphone permission** (for speech-to-text input)
-- Once permissions are granted, you're all set! The app can now handle voice interactions with Beeper.
-
-### 2. Using the App
-- Hold the screen to record your voice message (speech-to-text via ElevenLabs).
-- The app will process and send messages through Beeper.
-- Incoming messages can be read aloud (text-to-speech support via ElevenLabs).
+- Launch and choose **Demo** (no Beeper) or **Real** mode.
+- Grant permissions: Beeper read/send, microphone (and notifications on Android 13+).
+- **Interact**: Hold screen to speak (e.g., "Send message to Mom on whatsapp that I'm running late"), release, and listen for response.
+- "Read chats from Rasmus on discord".
 
 ## Features
-
-- **Voice Input**: Record and send messages hands-free.
-- **Message Reading**: Have chats, contacts, and messages read aloud.
-- **Chat Management**: Retrieve and interact with chats, contacts, and messages via voice commands.
+- **Voice Pipeline**: Tinfoil STT for input; ElevenLabs TTS for output.
+- **Smart Actions**: AI fetches/sends chats/messages via Beeper; supports queries like "What's new from Ford?"
+- **Modes**: Demo (Marvin's chats mock data) vs. Real (your chats).
+- **Privacy**: On-device Beeper access (use Beeper's on-device chats for full e2ee); Transcription and LLM processing happen without third party. For full verifiability, add Tinfoil TTS + pre-call verifier (for zero trust privacy).
 
 ## Important Notes
+- **Safety**: Hands-free only—test safely, obey laws. Only recommended to be used while driving cars inside video games.
 
-- **Device Requirement**: The app must run on the same Android device as Beeper to access chat data
-- **Permissions**: Beeper read/send and microphone permissions are required for voice chatting
-- **Safety First**: Always prioritize safe driving—use this app responsibly and in compliance with local laws
+Apache 2.0 Licensed. Questions? [Issues](https://github.com/ahtavarasmus/TextAndDrive/issues).
