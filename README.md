@@ -2,6 +2,9 @@
 
 An Android app that allows voice chatting with your chat apps while driving without having to look at the phone screen. It integrates with Beeper to enable hands-free messaging: speak to send messages, and have incoming messages read aloud via text-to-speech.
 
+[final.webm](https://github.com/user-attachments/assets/4b20871c-4e7f-4573-b501-079c679d7fd8)
+
+
 ## Prerequisites
 
 - **Android device** with Beeper Android app installed
