@@ -2,8 +2,7 @@
 
 Built for the [Junction 2025 AI Agent Hackathon](https://www.hackjunction.com/).
 
-![Demo Video](https://github.com/user-attachments/assets/4b20871c-4e7f-4573-b501-079c679d7fd8)  
-*(Hold screen to speak, release to process—Marvin confirms the action.)*
+[Demo](https://github.com/user-attachments/assets/abe3a478-5003-44e1-b315-fd72aed0bb1b)
 
 ## How It Works
 1. **Record**: Press and hold *anywhere* on the screen to capture voice via microphone.
