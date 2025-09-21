@@ -300,7 +300,7 @@ fun AudioRecordScreen(
                                     else -> null
                                 }
                                 if (!candidate.isNullOrBlank()) {
-                                    val voiceId = "5kMbtRSEKIkRZSdXxrZg"
+                                    val voiceId = "DVRu6guJ4N9Ox6AXBtoL"
                                     val ttsFile = ElevenLabsTts.textToSpeech(context, elevenApiKey, voiceId, candidate)
                                     // TTS is about to activate; hide the processing indicator
                                     isProcessing = false
