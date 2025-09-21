@@ -399,11 +399,11 @@ fun InterestScreen(
 private suspend fun addToResendAudience(email: String, amount: String) {
     withContext(Dispatchers.IO) {
         val resendApiKey = BuildConfig.RESEND_API_KEY // Assume added to BuildConfig
-        val audienceId = "your_audience_id_here" // Hardcode or from props
+        val audienceId = "c90f762e-f592-40ca-b3f6-533b7f7de077" // From the docs
         val client = OkHttpClient()
         val json = JSONObject().apply {
             put("email", email)
-            put("name", amount) // Use amount as 'name' field
+            put("first_name", amount)
         }
         val body = json.toString().toRequestBody("application/json".toMediaType())
         val request = Request.Builder()
@@ -419,6 +419,7 @@ private suspend fun addToResendAudience(email: String, amount: String) {
         }
     }
 }
+
 @Composable
 fun PermissionStatus(
     modifier: Modifier = Modifier,
