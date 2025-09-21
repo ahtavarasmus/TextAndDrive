@@ -64,13 +64,16 @@ fun AudioRecordScreen(
 ) {
     val context = LocalContext.current
     var isRecording by remember { mutableStateOf(false) }
+    var isProcessing by remember { mutableStateOf(false) }
     var recordingJob: Job? by remember { mutableStateOf(null) }
     var outputFile: File? by remember { mutableStateOf(null) }
     // Function to call after recording
     fun processRecordedAudio(filePath: String) {
         val ApiKey = BuildConfig.TINFOIL_API_KEY
         val elevenApiKey = BuildConfig.ELEVENLABS_API_KEY
-        if (context is ComponentActivity) {
+        // Show processing indicator while we do STT/LLM/tool calls
+        isProcessing = true
+            if (context is ComponentActivity) {
             context.lifecycleScope.launch {
                 try {
                     val transcription = STT.speechToText(ApiKey, File(filePath))
@@ -265,8 +268,10 @@ fun AudioRecordScreen(
                                     try {
                                         // Convert the LLM's TTS text into audio and play it.
                                         if (!elevenApiKey.isNullOrBlank()) {
-                                            val voiceId = "5kMbtRSEKIkRZSdXxrZg"
+                                            val voiceId = "DVRu6guJ4N9Ox6AXBtoL"
                                             val ttsFile = ElevenLabsTts.textToSpeech(context, elevenApiKey, voiceId, ttsMessage)
+                                            // TTS is about to activate; hide the processing indicator
+                                            isProcessing = false
                                             ElevenLabsTts.playFromFile(context, ttsFile)
                                             playedTts = true
                                             Log.d("AudioRecorder", "Played TTS for message (truncated): ${ttsMessage.take(120)}")
@@ -297,6 +302,8 @@ fun AudioRecordScreen(
                                 if (!candidate.isNullOrBlank()) {
                                     val voiceId = "5kMbtRSEKIkRZSdXxrZg"
                                     val ttsFile = ElevenLabsTts.textToSpeech(context, elevenApiKey, voiceId, candidate)
+                                    // TTS is about to activate; hide the processing indicator
+                                    isProcessing = false
                                     ElevenLabsTts.playFromFile(context, ttsFile)
                                     Log.d("AudioRecorder", "Fallback: played text via TTS (truncated): ${candidate.take(120)}")
                                     playedTts = true
@@ -310,9 +317,12 @@ fun AudioRecordScreen(
                     } catch (ex: Exception) {
                         Log.e("AudioRecorder", "LLM tool flow failed: ${ex.message}")
                     }
-                } catch (e: Exception) {
-                    Log.e("AudioRecorder", "STT call failed: ${e.message}")
-                }
+                    } catch (e: Exception) {
+                        Log.e("AudioRecorder", "STT call failed: ${e.message}")
+                    } finally {
+                        // Ensure processing indicator is hidden when work finishes or errors
+                        isProcessing = false
+                    }
             }
         }
     }
@@ -388,6 +398,20 @@ fun AudioRecordScreen(
                         style = MaterialTheme.typography.headlineMedium.copy(color = HitchhikerColors.OnBackground),
                         textAlign = TextAlign.Center
                     )
+                    // Processing indicator: visible while STT/LLM/tool processing is happening
+                    if (isProcessing) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "marvin is processing whatever you just said",
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                color = Color.LightGray,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.SemiBold
+                            ),
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
                     if (isDemo && !isRecording) {
                         Spacer(modifier = Modifier.height(24.dp))
                         Card(
