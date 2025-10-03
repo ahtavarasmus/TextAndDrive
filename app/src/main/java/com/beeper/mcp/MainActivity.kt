@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.background
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import com.beeper.mcp.ui.theme.BeeperMcpTheme
@@ -35,6 +36,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.io.IOException
+import androidx.compose.material3.ExperimentalMaterial3Api
 const val BEEPER_AUTHORITY = "com.beeper.api"
 // Hitchhiker's Guide to the Galaxy theme: Goofy green vibes, dark space background, with a touch of improbability
 object HitchhikerColors {
@@ -47,10 +49,10 @@ object HitchhikerColors {
     val Error = Color(0xFFFF5722) // Fiery error, Vogons would approve
 }
 class MainActivity : ComponentActivity() {
-    private var permissionsGranted by mutableStateOf(false)
+    private var beeperPermissionsGranted by mutableStateOf(false)
     private var micPermissionGranted by mutableStateOf(false)
-    // Tracks whether the user chose the demo flow or the real flow (or still choosing)
-    private var appMode by mutableStateOf("choice") // values: "choice", "demo", "real", "interest"
+    private var beeperEnabled by mutableStateOf(false)
+    private var menuExpanded by mutableStateOf(false)
     private val beeperPermissions = mutableListOf(
         "com.beeper.android.permission.READ_PERMISSION",
         "com.beeper.android.permission.SEND_PERMISSION"
@@ -62,7 +64,7 @@ class MainActivity : ComponentActivity() {
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
-        permissionsGranted = permissions.values.all { it }
+        beeperPermissionsGranted = permissions.values.all { it }
     }
     // Microphone permission launcher
     private val micPermissionLauncher = registerForActivityResult(
@@ -73,83 +75,101 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        checkBeeperPermissions()
-        if (permissionsGranted) {
-            appMode = "real"
-        }
+        checkPermissions()
         setContent {
             BeeperMcpTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = HitchhikerColors.Background
                 ) {
-                    Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-                        // Initial choice screen: Demo vs Real vs Interest
-                        when (appMode) {
-                            "choice" -> ChoiceScreen(
-                                modifier = Modifier.padding(innerPadding),
-                                onDemo = { appMode = "demo" },
-                                onReal = { appMode = "real" },
-                                onInterest = { appMode = "interest" }
-                            )
-                            "interest" -> InterestScreen(
-                                modifier = Modifier.padding(innerPadding),
-                                onBack = { appMode = "choice" }
-                            )
-                            "demo" -> {
-                                // Demo flow: require only microphone permissions, showcase Marvin's inbox
-                                if (micPermissionGranted) {
-                                    AudioRecordScreen(
-                                        modifier = Modifier.padding(innerPadding),
-                                        isDemo = true,
-                                        onBack = { appMode = "choice" }
+                    @OptIn(ExperimentalMaterial3Api::class)
+                    Scaffold(
+                        modifier = Modifier.fillMaxSize(),
+                        topBar = {
+                            TopAppBar(
+                                title = {
+                                    Text(
+                                        "DON'T PANIC! Voice Chat",
+                                        style = MaterialTheme.typography.headlineSmall.copy(
+                                            fontWeight = FontWeight.Bold
+                                        ),
+                                        color = HitchhikerColors.Primary
                                     )
-                                } else {
-                                    PermissionStatus(
-                                        permissionsGranted = permissionsGranted,
-                                        micPermissionGranted = micPermissionGranted,
-                                        requireBeeper = false,
-                                        modifier = Modifier.padding(innerPadding),
-                                        onRequestPermissions = { },
-                                        onRequestMic = { micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO) }
-                                    )
+                                },
+                                colors = TopAppBarDefaults.topAppBarColors(
+                                    containerColor = HitchhikerColors.Surface,
+                                    titleContentColor = HitchhikerColors.OnSurface,
+                                    navigationIconContentColor = HitchhikerColors.OnSurface
+                                ),
+                                navigationIcon = {
+                                    Box {
+                                        IconButton(onClick = { menuExpanded = !menuExpanded }) {
+                                            Icon(
+                                                Icons.Default.Menu,
+                                                contentDescription = "Menu"
+                                            )
+                                        }
+                                        DropdownMenu(
+                                            expanded = menuExpanded,
+                                            onDismissRequest = { menuExpanded = false },
+                                            modifier = Modifier.background(HitchhikerColors.Surface)
+                                        ) {
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(16.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.SpaceBetween
+                                            ) {
+                                                Text(
+                                                    "Enable Beeper Integration",
+                                                    color = HitchhikerColors.OnSurface,
+                                                    style = MaterialTheme.typography.bodyMedium
+                                                )
+                                                Switch(
+                                                    checked = beeperEnabled,
+                                                    onCheckedChange = { newValue ->
+                                                        beeperEnabled = newValue
+                                                        checkPermissions()
+                                                        if (newValue) {
+                                                            requestBeeperPermissions()
+                                                        }
+                                                        menuExpanded = false
+                                                    },
+                                                    colors = SwitchDefaults.colors(
+                                                        checkedThumbColor = HitchhikerColors.Primary,
+                                                        checkedTrackColor = HitchhikerColors.Primary.copy(alpha = 0.5f)
+                                                    )
+                                                )
+                                            }
+                                        }
+                                    }
                                 }
-                            }
-                            "real" -> {
-                                // Real flow: require both Beeper and microphone permissions
-                                if (permissionsGranted && micPermissionGranted) {
-                                    AudioRecordScreen(
-                                        modifier = Modifier.padding(innerPadding),
-                                        isDemo = false,
-                                        onBack = { appMode = "choice" }
-                                    )
-                                } else {
-                                    PermissionStatus(
-                                        permissionsGranted = permissionsGranted,
-                                        micPermissionGranted = micPermissionGranted,
-                                        requireBeeper = true,
-                                        modifier = Modifier.padding(innerPadding),
-                                        onRequestPermissions = { requestBeeperPermissions() },
-                                        onRequestMic = { micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO) }
-                                    )
-                                }
-                            }
-                            else -> {
-                                // fallback to choice
-                                ChoiceScreen(
-                                    modifier = Modifier.padding(innerPadding),
-                                    onDemo = { appMode = "demo" },
-                                    onReal = { appMode = "real" },
-                                    onInterest = { appMode = "interest" }
-                                )
-                            }
+                            )
+                        }
+                    ) { innerPadding ->
+                        if (micPermissionGranted && (!beeperEnabled || beeperPermissionsGranted)) {
+                            AudioRecordScreen(
+                                modifier = Modifier.padding(innerPadding),
+                                isDemo = !beeperEnabled,
+                                onBack = { }
+                            )
+                        } else {
+                            PermissionStatus(
+                                permissionsGranted = beeperPermissionsGranted,
+                                micPermissionGranted = micPermissionGranted,
+                                requireBeeper = beeperEnabled,
+                                modifier = Modifier.padding(innerPadding),
+                                onRequestPermissions = { requestBeeperPermissions() },
+                                onRequestMic = { micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO) }
+                            )
                         }
                     }
                 }
             }
         }
         // Preserve the existing sample tool call behavior only for the Real flow when permissions are already granted.
-        if (appMode == "real" && permissionsGranted && micPermissionGranted) {
+        if (beeperEnabled && beeperPermissionsGranted && micPermissionGranted) {
             lifecycleScope.launch {
                 // Sample tool call for "get_chats" (mimics OpenAI response format)
                 val toolCall = mapOf(
@@ -167,16 +187,20 @@ class MainActivity : ComponentActivity() {
     }
     override fun onResume() {
         super.onResume()
-        checkBeeperPermissions() // Re-check on resume
+        checkPermissions() // Re-check on resume
     }
-    private fun checkBeeperPermissions() {
-        permissionsGranted = beeperPermissions.all { permission ->
-            ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
-        }
+    private fun checkPermissions() {
         micPermissionGranted = ContextCompat.checkSelfPermission(
             this,
             Manifest.permission.RECORD_AUDIO
         ) == PackageManager.PERMISSION_GRANTED
+        beeperPermissionsGranted = if (beeperEnabled) {
+            beeperPermissions.all { permission ->
+                ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
+            }
+        } else {
+            true
+        }
     }
     private fun requestBeeperPermissions() {
         val permissionsToRequest = beeperPermissions.filter { permission ->
@@ -185,241 +209,8 @@ class MainActivity : ComponentActivity() {
         if (permissionsToRequest.isNotEmpty()) {
             permissionLauncher.launch(permissionsToRequest)
         }
-        // Also request microphone if missing
-        if (!micPermissionGranted) {
-            micPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-        }
     }
 }
-@Composable
-fun ChoiceScreen(
-    modifier: Modifier = Modifier,
-    onDemo: () -> Unit = {},
-    onReal: () -> Unit = {},
-    onInterest: () -> Unit = {}
-) {
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .background(HitchhikerColors.Background)
-            .padding(24.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(
-            text = "DON'T PANIC!",
-            style = MaterialTheme.typography.headlineLarge.copy(
-                fontSize = 32.sp,
-                fontWeight = FontWeight.Bold
-            ),
-            color = HitchhikerColors.Primary,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
-        Text(
-            text = "Voice-Command Your Messages on WhatsApp, iMessage & More – Hands-Free Chat via Beeper (Install & Connect Your Networks for Galactic Convenience)",
-            style = MaterialTheme.typography.bodyLarge.copy(
-                fontSize = 16.sp
-            ),
-            color = HitchhikerColors.OnSurface,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(bottom = 32.dp)
-        )
-        Button(
-            onClick = onDemo,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp)
-                .padding(bottom = 16.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = HitchhikerColors.Primary
-            )
-        ) {
-            Text("Try Demo: Chat with Marvin's Inbox")
-        }
-        Button(
-            onClick = onReal,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp)
-                .padding(bottom = 16.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = HitchhikerColors.Primary.copy(alpha = 0.7f)
-            )
-        ) {
-            Text("Real Mode: Your Actual Chats")
-        }
-        OutlinedButton(
-            onClick = onInterest,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp),
-            colors = ButtonDefaults.outlinedButtonColors(
-                contentColor = HitchhikerColors.Primary
-            )
-        ) {
-            Text("Sign Up for Launch (We'll Towel You In)")
-        }
-        // Funny small print legal disclaimer
-        Spacer(modifier = Modifier.height(32.dp))
-        Text(
-            text = "* Not for real-world driving—brains the size of planets shouldn't be wasted on that. Only for video games or improbably flying the Heart of Gold. Vogon poetry responses not guaranteed.",
-            style = MaterialTheme.typography.bodySmall,
-            color = HitchhikerColors.OnSurface.copy(alpha = 0.7f),
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(horizontal = 16.dp)
-        )
-    }
-}
-@Composable
-fun InterestScreen(
-    modifier: Modifier = Modifier,
-    onBack: () -> Unit
-) {
-    var email by remember { mutableStateOf("") }
-    var amount by remember { mutableStateOf("") }
-    var submitted by remember { mutableStateOf(false) }
-    var isSubmitting by remember { mutableStateOf(false) }
-    val context = LocalContext.current
-    if (submitted) {
-        Column(
-            modifier = modifier
-                .fillMaxSize()
-                .background(HitchhikerColors.Background)
-                .padding(24.dp),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Text(
-                text = "Thanks! We'll notify you when it's improbably ready. (Don't forget your towel.)",
-                style = MaterialTheme.typography.headlineSmall,
-                color = HitchhikerColors.Success,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(bottom = 16.dp)
-            )
-            Button(
-                onClick = onBack,
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = HitchhikerColors.Primary
-                )
-            ) {
-                Text("Back to the Pantry")
-            }
-        }
-    } else {
-        Column(
-            modifier = modifier
-                .fillMaxSize()
-                .background(HitchhikerColors.Background)
-                .padding(24.dp),
-            verticalArrangement = Arrangement.Center
-        ) {
-            Text(
-                text = "Want to Hitch a Ride on This App?",
-                style = MaterialTheme.typography.headlineSmall.copy(
-                    fontWeight = FontWeight.Bold
-                ),
-                color = HitchhikerColors.OnBackground,
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
-            Text(
-                text = "It'll be 100% private—like the Ultimate Question hidden in a teapot. (Demo's private now, but verifiability is still orbiting.)",
-                style = MaterialTheme.typography.bodyMedium,
-                color = HitchhikerColors.OnSurface,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(bottom = 32.dp)
-            )
-            OutlinedTextField(
-                value = email,
-                onValueChange = { email = it },
-                label = { Text("Your email (no spam, promise)") },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 16.dp),
-                singleLine = true,
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = HitchhikerColors.Primary,
-                    unfocusedBorderColor = HitchhikerColors.OnSurface.copy(alpha = 0.5f)
-                )
-            )
-            OutlinedTextField(
-                value = amount,
-                onValueChange = { amount = it },
-                label = { Text("Willing to pay (e.g., $5/month for infinite improbability)") },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 24.dp),
-                singleLine = true,
-                prefix = { Text("$") },
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = HitchhikerColors.Primary,
-                    unfocusedBorderColor = HitchhikerColors.OnSurface.copy(alpha = 0.5f)
-                )
-            )
-            Button(
-                onClick = {
-                    if (email.isNotBlank() && amount.isNotBlank()) {
-                        isSubmitting = true
-                        (context as? ComponentActivity)?.lifecycleScope?.launch {
-                            try {
-                                addToResendAudience(email, amount)
-                                submitted = true
-                            } catch (e: Exception) {
-                                Log.e("InterestScreen", "Submit failed: ${e.message}")
-                            } finally {
-                                isSubmitting = false
-                            }
-                        }
-                    }
-                },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = !isSubmitting && email.isNotBlank() && amount.isNotBlank(),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = HitchhikerColors.Primary
-                )
-            ) {
-                if (isSubmitting) {
-                    Text("Beaming Up...")
-                } else {
-                    Text("Submit & Mostly Harmless Pay")
-                }
-            }
-            TextButton(
-                onClick = onBack,
-                modifier = Modifier.align(Alignment.CenterHorizontally),
-                colors = ButtonDefaults.textButtonColors(
-                    contentColor = HitchhikerColors.Primary
-                )
-            ) {
-                Text("Back (Or Hitch Another Ride)")
-            }
-        }
-    }
-}
-private suspend fun addToResendAudience(email: String, amount: String) {
-    withContext(Dispatchers.IO) {
-        val resendApiKey = BuildConfig.RESEND_API_KEY // Assume added to BuildConfig
-        val audienceId = "c90f762e-f592-40ca-b3f6-533b7f7de077" // From the docs
-        val client = OkHttpClient()
-        val json = JSONObject().apply {
-            put("email", email)
-            put("first_name", amount)
-        }
-        val body = json.toString().toRequestBody("application/json".toMediaType())
-        val request = Request.Builder()
-            .url("https://api.resend.com/audiences/$audienceId/contacts")
-            .addHeader("Authorization", "Bearer $resendApiKey")
-            .addHeader("Content-Type", "application/json")
-            .post(body)
-            .build()
-        client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) {
-                throw IOException("Resend API failed: ${response.code} - ${response.body?.string()}")
-            }
-        }
-    }
-}
-
 @Composable
 fun PermissionStatus(
     modifier: Modifier = Modifier,
